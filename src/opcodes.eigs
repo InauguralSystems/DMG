@@ -1,0 +1,688 @@
+# ============================================================
+# DMG Opcodes — SM83 instruction decoder and executor
+# ============================================================
+# Returns cycle count for each instruction.
+
+# Helper to read register by index (0=B,1=C,2=D,3=E,4=H,5=L,6=(HL),7=A)
+define read_r8(cpu, mem, idx) as:
+    match idx:
+        case 0:
+            return cpu.b
+        case 1:
+            return cpu.c
+        case 2:
+            return cpu.d
+        case 3:
+            return cpu.e
+        case 4:
+            return cpu.h
+        case 5:
+            return cpu.l
+        case 6:
+            return mem_read of [mem, get_hl of cpu]
+        case 7:
+            return cpu.a
+    return 0
+
+define write_r8(cpu, mem, idx, val) as:
+    val is bit_and of [val, 0xFF]
+    match idx:
+        case 0:
+            cpu.b is val
+        case 1:
+            cpu.c is val
+        case 2:
+            cpu.d is val
+        case 3:
+            cpu.e is val
+        case 4:
+            cpu.h is val
+        case 5:
+            cpu.l is val
+        case 6:
+            mem_write of [mem, get_hl of cpu, val]
+        case 7:
+            cpu.a is val
+
+# Sign-extend an 8-bit value to signed
+define sign8(val) as:
+    if val >= 128:
+        return val - 256
+    return val
+
+# Push 16-bit value onto stack
+define push16(cpu, mem, val) as:
+    cpu.sp is bit_and of [cpu.sp - 1, 0xFFFF]
+    mem_write of [mem, cpu.sp, bit_and of [bit_shr of [val, 8], 0xFF]]
+    cpu.sp is bit_and of [cpu.sp - 1, 0xFFFF]
+    mem_write of [mem, cpu.sp, bit_and of [val, 0xFF]]
+
+# Pop 16-bit value from stack
+define pop16(cpu, mem) as:
+    lo is mem_read of [mem, cpu.sp]
+    cpu.sp is bit_and of [cpu.sp + 1, 0xFFFF]
+    hi is mem_read of [mem, cpu.sp]
+    cpu.sp is bit_and of [cpu.sp + 1, 0xFFFF]
+    return bit_or of [bit_shl of [hi, 8], lo]
+
+# ============================================================
+# CB-prefixed opcodes
+# ============================================================
+
+define exec_cb(cpu, mem) as:
+    op is fetch8 of [cpu, mem]
+    # Decode: top 2 bits = operation, middle 3 = bit, bottom 3 = register
+    reg is bit_and of [op, 0x07]
+    bit is bit_and of [bit_shr of [op, 3], 0x07]
+    group is bit_shr of [op, 6]
+
+    val is read_r8 of [cpu, mem, reg]
+    cycles is 8
+    if reg == 6:
+        cycles is 12
+
+    match group:
+        case 0:
+            # Rotate/shift
+            match bit:
+                case 0:
+                    val is alu_rlc of [cpu, val]
+                case 1:
+                    val is alu_rrc of [cpu, val]
+                case 2:
+                    val is alu_rl of [cpu, val]
+                case 3:
+                    val is alu_rr of [cpu, val]
+                case 4:
+                    val is alu_sla of [cpu, val]
+                case 5:
+                    val is alu_sra of [cpu, val]
+                case 6:
+                    val is alu_swap of [cpu, val]
+                case 7:
+                    val is alu_srl of [cpu, val]
+            write_r8 of [cpu, mem, reg, val]
+            if reg == 6:
+                cycles is 16
+        case 1:
+            # BIT
+            alu_bit of [cpu, bit, val]
+            if reg == 6:
+                cycles is 12
+        case 2:
+            # RES
+            val is alu_res of [bit, val]
+            write_r8 of [cpu, mem, reg, val]
+            if reg == 6:
+                cycles is 16
+        case 3:
+            # SET
+            val is alu_set of [bit, val]
+            write_r8 of [cpu, mem, reg, val]
+            if reg == 6:
+                cycles is 16
+
+    return cycles
+
+# ============================================================
+# Main opcode execution
+# ============================================================
+
+define exec_op(cpu, mem) as:
+    op is fetch8 of [cpu, mem]
+
+    # NOP
+    if op == 0x00:
+        return 4
+
+    # LD r16, d16
+    if op == 0x01:
+        val is fetch16 of [cpu, mem]
+        set_bc of [cpu, val]
+        return 12
+    if op == 0x11:
+        val is fetch16 of [cpu, mem]
+        set_de of [cpu, val]
+        return 12
+    if op == 0x21:
+        val is fetch16 of [cpu, mem]
+        set_hl of [cpu, val]
+        return 12
+    if op == 0x31:
+        cpu.sp is fetch16 of [cpu, mem]
+        return 12
+
+    # LD (r16), A
+    if op == 0x02:
+        mem_write of [mem, get_bc of cpu, cpu.a]
+        return 8
+    if op == 0x12:
+        mem_write of [mem, get_de of cpu, cpu.a]
+        return 8
+    if op == 0x22:
+        hl is get_hl of cpu
+        mem_write of [mem, hl, cpu.a]
+        set_hl of [cpu, bit_and of [hl + 1, 0xFFFF]]
+        return 8
+    if op == 0x32:
+        hl is get_hl of cpu
+        mem_write of [mem, hl, cpu.a]
+        set_hl of [cpu, bit_and of [hl - 1, 0xFFFF]]
+        return 8
+
+    # A, (r16)
+    if op == 0x0A:
+        cpu.a is mem_read of [mem, get_bc of cpu]
+        return 8
+    if op == 0x1A:
+        cpu.a is mem_read of [mem, get_de of cpu]
+        return 8
+    if op == 0x2A:
+        hl is get_hl of cpu
+        cpu.a is mem_read of [mem, hl]
+        set_hl of [cpu, bit_and of [hl + 1, 0xFFFF]]
+        return 8
+    if op == 0x3A:
+        hl is get_hl of cpu
+        cpu.a is mem_read of [mem, hl]
+        set_hl of [cpu, bit_and of [hl - 1, 0xFFFF]]
+        return 8
+
+    # INC r16
+    if op == 0x03:
+        set_bc of [cpu, bit_and of [get_bc of cpu + 1, 0xFFFF]]
+        return 8
+    if op == 0x13:
+        set_de of [cpu, bit_and of [get_de of cpu + 1, 0xFFFF]]
+        return 8
+    if op == 0x23:
+        set_hl of [cpu, bit_and of [get_hl of cpu + 1, 0xFFFF]]
+        return 8
+    if op == 0x33:
+        cpu.sp is bit_and of [cpu.sp + 1, 0xFFFF]
+        return 8
+
+    # DEC r16
+    if op == 0x0B:
+        set_bc of [cpu, bit_and of [get_bc of cpu - 1, 0xFFFF]]
+        return 8
+    if op == 0x1B:
+        set_de of [cpu, bit_and of [get_de of cpu - 1, 0xFFFF]]
+        return 8
+    if op == 0x2B:
+        set_hl of [cpu, bit_and of [get_hl of cpu - 1, 0xFFFF]]
+        return 8
+    if op == 0x3B:
+        cpu.sp is bit_and of [cpu.sp - 1, 0xFFFF]
+        return 8
+
+    # ADD HL, r16
+    if op == 0x09:
+        alu_add_hl of [cpu, get_bc of cpu]
+        return 8
+    if op == 0x19:
+        alu_add_hl of [cpu, get_de of cpu]
+        return 8
+    if op == 0x29:
+        alu_add_hl of [cpu, get_hl of cpu]
+        return 8
+    if op == 0x39:
+        alu_add_hl of [cpu, cpu.sp]
+        return 8
+
+    # INC r8
+    if op == 0x04:
+        cpu.b is alu_inc of [cpu, cpu.b]
+        return 4
+    if op == 0x0C:
+        cpu.c is alu_inc of [cpu, cpu.c]
+        return 4
+    if op == 0x14:
+        cpu.d is alu_inc of [cpu, cpu.d]
+        return 4
+    if op == 0x1C:
+        cpu.e is alu_inc of [cpu, cpu.e]
+        return 4
+    if op == 0x24:
+        cpu.h is alu_inc of [cpu, cpu.h]
+        return 4
+    if op == 0x2C:
+        cpu.l is alu_inc of [cpu, cpu.l]
+        return 4
+    if op == 0x34:
+        hl is get_hl of cpu
+        val is alu_inc of [cpu, mem_read of [mem, hl]]
+        mem_write of [mem, hl, val]
+        return 12
+    if op == 0x3C:
+        cpu.a is alu_inc of [cpu, cpu.a]
+        return 4
+
+    # DEC r8
+    if op == 0x05:
+        cpu.b is alu_dec of [cpu, cpu.b]
+        return 4
+    if op == 0x0D:
+        cpu.c is alu_dec of [cpu, cpu.c]
+        return 4
+    if op == 0x15:
+        cpu.d is alu_dec of [cpu, cpu.d]
+        return 4
+    if op == 0x1D:
+        cpu.e is alu_dec of [cpu, cpu.e]
+        return 4
+    if op == 0x25:
+        cpu.h is alu_dec of [cpu, cpu.h]
+        return 4
+    if op == 0x2D:
+        cpu.l is alu_dec of [cpu, cpu.l]
+        return 4
+    if op == 0x35:
+        hl is get_hl of cpu
+        val is alu_dec of [cpu, mem_read of [mem, hl]]
+        mem_write of [mem, hl, val]
+        return 12
+    if op == 0x3D:
+        cpu.a is alu_dec of [cpu, cpu.a]
+        return 4
+
+    # LD r8, d8
+    if op == 0x06:
+        cpu.b is fetch8 of [cpu, mem]
+        return 8
+    if op == 0x0E:
+        cpu.c is fetch8 of [cpu, mem]
+        return 8
+    if op == 0x16:
+        cpu.d is fetch8 of [cpu, mem]
+        return 8
+    if op == 0x1E:
+        cpu.e is fetch8 of [cpu, mem]
+        return 8
+    if op == 0x26:
+        cpu.h is fetch8 of [cpu, mem]
+        return 8
+    if op == 0x2E:
+        cpu.l is fetch8 of [cpu, mem]
+        return 8
+    if op == 0x36:
+        mem_write of [mem, get_hl of cpu, fetch8 of [cpu, mem]]
+        return 12
+    if op == 0x3E:
+        cpu.a is fetch8 of [cpu, mem]
+        return 8
+
+    # RLCA, RLA, RRCA, RRA
+    if op == 0x07:
+        cpu.a is alu_rlc of [cpu, cpu.a]
+        cpu.f is bit_and of [cpu.f, FLAG_C]
+        return 4
+    if op == 0x17:
+        cpu.a is alu_rl of [cpu, cpu.a]
+        cpu.f is bit_and of [cpu.f, FLAG_C]
+        return 4
+    if op == 0x0F:
+        cpu.a is alu_rrc of [cpu, cpu.a]
+        cpu.f is bit_and of [cpu.f, FLAG_C]
+        return 4
+    if op == 0x1F:
+        cpu.a is alu_rr of [cpu, cpu.a]
+        cpu.f is bit_and of [cpu.f, FLAG_C]
+        return 4
+
+    # LD (a16), SP
+    if op == 0x08:
+        addr is fetch16 of [cpu, mem]
+        mem_write of [mem, addr, bit_and of [cpu.sp, 0xFF]]
+        mem_write of [mem, bit_and of [addr + 1, 0xFFFF], bit_shr of [cpu.sp, 8]]
+        return 20
+
+    # JR cc, s8 and JR s8
+    if op == 0x18:
+        offset is sign8 of (fetch8 of [cpu, mem])
+        cpu.pc is bit_and of [cpu.pc + offset, 0xFFFF]
+        return 12
+    if op == 0x20:
+        offset is sign8 of (fetch8 of [cpu, mem])
+        if (flag_z of cpu) == 0:
+            cpu.pc is bit_and of [cpu.pc + offset, 0xFFFF]
+            return 12
+        return 8
+    if op == 0x28:
+        offset is sign8 of (fetch8 of [cpu, mem])
+        if (flag_z of cpu) == 1:
+            cpu.pc is bit_and of [cpu.pc + offset, 0xFFFF]
+            return 12
+        return 8
+    if op == 0x30:
+        offset is sign8 of (fetch8 of [cpu, mem])
+        if (flag_c of cpu) == 0:
+            cpu.pc is bit_and of [cpu.pc + offset, 0xFFFF]
+            return 12
+        return 8
+    if op == 0x38:
+        offset is sign8 of (fetch8 of [cpu, mem])
+        if (flag_c of cpu) == 1:
+            cpu.pc is bit_and of [cpu.pc + offset, 0xFFFF]
+            return 12
+        return 8
+
+    # DAA, CPL, SCF, CCF
+    if op == 0x27:
+        alu_daa of cpu
+        return 4
+    if op == 0x2F:
+        cpu.a is bit_xor of [cpu.a, 0xFF]
+        cpu.f is bit_or of [bit_and of [cpu.f, bit_or of [FLAG_Z, FLAG_C]], bit_or of [FLAG_N, FLAG_H]]
+        return 4
+    if op == 0x37:
+        cpu.f is bit_or of [bit_and of [cpu.f, FLAG_Z], FLAG_C]
+        return 4
+    if op == 0x3F:
+        c is bit_xor of [bit_and of [cpu.f, FLAG_C], FLAG_C]
+        cpu.f is bit_or of [bit_and of [cpu.f, FLAG_Z], c]
+        return 4
+
+    # HALT
+    if op == 0x76:
+        cpu.halted is 1
+        return 4
+
+    # LD r8, r8 block (0x40-0x7F, excluding 0x76=HALT)
+    if op >= 0x40 and op <= 0x7F:
+        dst is bit_and of [bit_shr of [op - 0x40, 3], 0x07]
+        src is bit_and of [op, 0x07]
+        val is read_r8 of [cpu, mem, src]
+        write_r8 of [cpu, mem, dst, val]
+        if src == 6 or dst == 6:
+            return 8
+        return 4
+
+    # ALU A, r8 block (0x80-0xBF)
+    if op >= 0x80 and op <= 0xBF:
+        src is bit_and of [op, 0x07]
+        val is read_r8 of [cpu, mem, src]
+        alu_op is bit_and of [bit_shr of [op - 0x80, 3], 0x07]
+        match alu_op:
+            case 0:
+                alu_add of [cpu, val]
+            case 1:
+                alu_adc of [cpu, val]
+            case 2:
+                alu_sub of [cpu, val]
+            case 3:
+                alu_sbc of [cpu, val]
+            case 4:
+                alu_and of [cpu, val]
+            case 5:
+                alu_xor of [cpu, val]
+            case 6:
+                alu_or of [cpu, val]
+            case 7:
+                alu_cp of [cpu, val]
+        if src == 6:
+            return 8
+        return 4
+
+    # ALU A, d8
+    if op == 0xC6:
+        alu_add of [cpu, fetch8 of [cpu, mem]]
+        return 8
+    if op == 0xCE:
+        alu_adc of [cpu, fetch8 of [cpu, mem]]
+        return 8
+    if op == 0xD6:
+        alu_sub of [cpu, fetch8 of [cpu, mem]]
+        return 8
+    if op == 0xDE:
+        alu_sbc of [cpu, fetch8 of [cpu, mem]]
+        return 8
+    if op == 0xE6:
+        alu_and of [cpu, fetch8 of [cpu, mem]]
+        return 8
+    if op == 0xEE:
+        alu_xor of [cpu, fetch8 of [cpu, mem]]
+        return 8
+    if op == 0xF6:
+        alu_or of [cpu, fetch8 of [cpu, mem]]
+        return 8
+    if op == 0xFE:
+        alu_cp of [cpu, fetch8 of [cpu, mem]]
+        return 8
+
+    # RET cc, RET, RETI
+    if op == 0xC0:
+        if (flag_z of cpu) == 0:
+            cpu.pc is pop16 of [cpu, mem]
+            return 20
+        return 8
+    if op == 0xC8:
+        if (flag_z of cpu) == 1:
+            cpu.pc is pop16 of [cpu, mem]
+            return 20
+        return 8
+    if op == 0xD0:
+        if (flag_c of cpu) == 0:
+            cpu.pc is pop16 of [cpu, mem]
+            return 20
+        return 8
+    if op == 0xD8:
+        if (flag_c of cpu) == 1:
+            cpu.pc is pop16 of [cpu, mem]
+            return 20
+        return 8
+    if op == 0xC9:
+        cpu.pc is pop16 of [cpu, mem]
+        return 16
+    if op == 0xD9:
+        cpu.pc is pop16 of [cpu, mem]
+        cpu.ime is 1
+        return 16
+
+    # JP cc, a16 and JP a16
+    if op == 0xC2:
+        addr is fetch16 of [cpu, mem]
+        if (flag_z of cpu) == 0:
+            cpu.pc is addr
+            return 16
+        return 12
+    if op == 0xCA:
+        addr is fetch16 of [cpu, mem]
+        if (flag_z of cpu) == 1:
+            cpu.pc is addr
+            return 16
+        return 12
+    if op == 0xD2:
+        addr is fetch16 of [cpu, mem]
+        if (flag_c of cpu) == 0:
+            cpu.pc is addr
+            return 16
+        return 12
+    if op == 0xDA:
+        addr is fetch16 of [cpu, mem]
+        if (flag_c of cpu) == 1:
+            cpu.pc is addr
+            return 16
+        return 12
+    if op == 0xC3:
+        cpu.pc is fetch16 of [cpu, mem]
+        return 16
+    if op == 0xE9:
+        cpu.pc is get_hl of cpu
+        return 4
+
+    # CALL cc, a16 and CALL a16
+    if op == 0xC4:
+        addr is fetch16 of [cpu, mem]
+        if (flag_z of cpu) == 0:
+            push16 of [cpu, mem, cpu.pc]
+            cpu.pc is addr
+            return 24
+        return 12
+    if op == 0xCC:
+        addr is fetch16 of [cpu, mem]
+        if (flag_z of cpu) == 1:
+            push16 of [cpu, mem, cpu.pc]
+            cpu.pc is addr
+            return 24
+        return 12
+    if op == 0xD4:
+        addr is fetch16 of [cpu, mem]
+        if (flag_c of cpu) == 0:
+            push16 of [cpu, mem, cpu.pc]
+            cpu.pc is addr
+            return 24
+        return 12
+    if op == 0xDC:
+        addr is fetch16 of [cpu, mem]
+        if (flag_c of cpu) == 1:
+            push16 of [cpu, mem, cpu.pc]
+            cpu.pc is addr
+            return 24
+        return 12
+    if op == 0xCD:
+        addr is fetch16 of [cpu, mem]
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is addr
+        return 24
+
+    # PUSH/POP r16
+    if op == 0xC1:
+        set_bc of [cpu, pop16 of [cpu, mem]]
+        return 12
+    if op == 0xD1:
+        set_de of [cpu, pop16 of [cpu, mem]]
+        return 12
+    if op == 0xE1:
+        set_hl of [cpu, pop16 of [cpu, mem]]
+        return 12
+    if op == 0xF1:
+        set_af of [cpu, pop16 of [cpu, mem]]
+        return 12
+    if op == 0xC5:
+        push16 of [cpu, mem, get_bc of cpu]
+        return 16
+    if op == 0xD5:
+        push16 of [cpu, mem, get_de of cpu]
+        return 16
+    if op == 0xE5:
+        push16 of [cpu, mem, get_hl of cpu]
+        return 16
+    if op == 0xF5:
+        push16 of [cpu, mem, get_af of cpu]
+        return 16
+
+    # RST
+    if op == 0xC7:
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x00
+        return 16
+    if op == 0xCF:
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x08
+        return 16
+    if op == 0xD7:
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x10
+        return 16
+    if op == 0xDF:
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x18
+        return 16
+    if op == 0xE7:
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x20
+        return 16
+    if op == 0xEF:
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x28
+        return 16
+    if op == 0xF7:
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x30
+        return 16
+    if op == 0xFF:
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x38
+        return 16
+
+    # LDH (a8), A and LDH A, (a8)
+    if op == 0xE0:
+        addr is bit_or of [0xFF00, fetch8 of [cpu, mem]]
+        mem_write of [mem, addr, cpu.a]
+        return 12
+    if op == 0xF0:
+        addr is bit_or of [0xFF00, fetch8 of [cpu, mem]]
+        cpu.a is mem_read of [mem, addr]
+        return 12
+
+    # LD (C), A and LD A, (C)
+    if op == 0xE2:
+        mem_write of [mem, bit_or of [0xFF00, cpu.c], cpu.a]
+        return 8
+    if op == 0xF2:
+        cpu.a is mem_read of [mem, bit_or of [0xFF00, cpu.c]]
+        return 8
+
+    # LD (a16), A and LD A, (a16)
+    if op == 0xEA:
+        mem_write of [mem, fetch16 of [cpu, mem], cpu.a]
+        return 16
+    if op == 0xFA:
+        cpu.a is mem_read of [mem, fetch16 of [cpu, mem]]
+        return 16
+
+    # ADD SP, s8
+    if op == 0xE8:
+        offset is sign8 of (fetch8 of [cpu, mem])
+        result is cpu.sp + offset
+        h is 0
+        c is 0
+        if bit_and of [bit_xor of [bit_xor of [cpu.sp, offset], result], 0x10] != 0:
+            h is 1
+        if bit_and of [bit_xor of [bit_xor of [cpu.sp, offset], result], 0x100] != 0:
+            c is 1
+        cpu.sp is bit_and of [result, 0xFFFF]
+        set_flags of [cpu, 0, 0, h, c]
+        return 16
+
+    # LD HL, SP+s8
+    if op == 0xF8:
+        offset is sign8 of (fetch8 of [cpu, mem])
+        result is cpu.sp + offset
+        h is 0
+        c is 0
+        if bit_and of [bit_xor of [bit_xor of [cpu.sp, offset], result], 0x10] != 0:
+            h is 1
+        if bit_and of [bit_xor of [bit_xor of [cpu.sp, offset], result], 0x100] != 0:
+            c is 1
+        set_hl of [cpu, bit_and of [result, 0xFFFF]]
+        set_flags of [cpu, 0, 0, h, c]
+        return 12
+
+    # LD SP, HL
+    if op == 0xF9:
+        cpu.sp is get_hl of cpu
+        return 8
+
+    # DI, EI
+    if op == 0xF3:
+        cpu.ime is 0
+        return 4
+    if op == 0xFB:
+        cpu.ime is 1
+        return 4
+
+    # STOP
+    if op == 0x10:
+        fetch8 of [cpu, mem]
+        cpu.stopped is 1
+        return 4
+
+    # CB prefix
+    if op == 0xCB:
+        return exec_cb of [cpu, mem]
+
+    # Undefined opcodes
+    print of f"Undefined opcode: 0x{op} at PC=0x{cpu.pc - 1}"
+    return 4

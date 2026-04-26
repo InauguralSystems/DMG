@@ -1,0 +1,169 @@
+# ============================================================
+# DMG CPU unit tests
+# ============================================================
+
+load_file of "src/cpu.eigs"
+load_file of "src/memory.eigs"
+load_file of "src/opcodes.eigs"
+
+print of "=== DMG CPU tests ==="
+
+# Helper: load bytes into memory at addr
+define load_bytes(mem, addr, bytes) as:
+    for i in range of (len of bytes):
+        mem.data[addr + i] is bytes[i]
+
+# ---- Register pair tests ----
+cpu is new_cpu of null
+set_bc of [cpu, 0x1234]
+assert of [get_bc of cpu == 0x1234, "BC = 0x1234"]
+assert of [cpu.b == 0x12, "B = 0x12"]
+assert of [cpu.c == 0x34, "C = 0x34"]
+set_hl of [cpu, 0xABCD]
+assert of [get_hl of cpu == 0xABCD, "HL = 0xABCD"]
+print of "  register pairs: ok"
+
+# ---- Flag tests ----
+set_flags of [cpu, 1, 0, 1, 0]
+assert of [cpu.f == 0xA0, f"flags ZH = 0xA0, got 0x{cpu.f}"]
+assert of [(flag_z of cpu) == 1, "Z set"]
+assert of [(flag_h of cpu) == 1, "H set"]
+assert of [(flag_c of cpu) == 0, "C clear"]
+print of "  flags: ok"
+
+# ---- ALU ADD ----
+cpu is new_cpu of null
+cpu.a is 0x3A
+alu_add of [cpu, 0xC6]
+assert of [cpu.a == 0x00, f"0x3A + 0xC6 = 0x00, got 0x{cpu.a}"]
+assert of [(flag_z of cpu) == 1, "Z set on zero"]
+assert of [(flag_h of cpu) == 1, "H set"]
+assert of [(flag_c of cpu) == 1, "C set on overflow"]
+print of "  ALU ADD: ok"
+
+# ---- ALU SUB ----
+cpu is new_cpu of null
+cpu.a is 0x3E
+alu_sub of [cpu, 0x3E]
+assert of [cpu.a == 0x00, "SUB self = 0"]
+assert of [(flag_z of cpu) == 1, "Z set"]
+assert of [(flag_n of cpu) == 1, "N set"]
+print of "  ALU SUB: ok"
+
+# ---- ALU AND/XOR/OR ----
+cpu is new_cpu of null
+cpu.a is 0x5A
+alu_and of [cpu, 0x3F]
+assert of [cpu.a == 0x1A, f"AND 0x5A & 0x3F = 0x1A, got 0x{cpu.a}"]
+cpu.a is 0xFF
+alu_xor of [cpu, 0xFF]
+assert of [cpu.a == 0x00, "XOR self = 0"]
+assert of [(flag_z of cpu) == 1, "XOR Z set"]
+print of "  ALU AND/XOR/OR: ok"
+
+# ---- INC/DEC ----
+cpu is new_cpu of null
+cpu.a is 0xFF
+cpu.a is alu_inc of [cpu, cpu.a]
+assert of [cpu.a == 0x00, "INC 0xFF = 0x00"]
+assert of [(flag_z of cpu) == 1, "INC Z set"]
+assert of [(flag_h of cpu) == 1, "INC H set"]
+cpu.a is alu_dec of [cpu, cpu.a]
+assert of [cpu.a == 0xFF, "DEC 0x00 = 0xFF"]
+print of "  INC/DEC: ok"
+
+# ---- Opcode execution: NOP ----
+cpu is new_cpu of null
+mem is new_memory of null
+cpu.pc is 0x0100
+load_bytes of [mem, 0x0100, [0x00]]
+cycles is exec_op of [cpu, mem]
+assert of [cycles == 4, "NOP = 4 cycles"]
+assert of [cpu.pc == 0x0101, "PC advanced"]
+print of "  NOP: ok"
+
+# ---- Opcode: LD B, 0x42 (0x06 0x42) ----
+cpu is new_cpu of null
+mem is new_memory of null
+cpu.pc is 0x0100
+load_bytes of [mem, 0x0100, [0x06, 0x42]]
+cycles is exec_op of [cpu, mem]
+assert of [cpu.b == 0x42, f"LD B, 0x42: got 0x{cpu.b}"]
+assert of [cycles == 8, "LD r, d8 = 8 cycles"]
+print of "  LD B, d8: ok"
+
+# ---- Opcode: XOR A (0xAF) — clears A, sets Z ----
+cpu is new_cpu of null
+mem is new_memory of null
+cpu.pc is 0x0100
+cpu.a is 0x42
+load_bytes of [mem, 0x0100, [0xAF]]
+exec_op of [cpu, mem]
+assert of [cpu.a == 0x00, "XOR A clears A"]
+assert of [(flag_z of cpu) == 1, "XOR A sets Z"]
+print of "  XOR A: ok"
+
+# ---- Opcode: JP a16 (0xC3) ----
+cpu is new_cpu of null
+mem is new_memory of null
+cpu.pc is 0x0100
+load_bytes of [mem, 0x0100, [0xC3, 0x50, 0x01]]
+cycles is exec_op of [cpu, mem]
+assert of [cpu.pc == 0x0150, f"JP 0x0150: PC=0x{cpu.pc}"]
+assert of [cycles == 16, "JP = 16 cycles"]
+print of "  JP a16: ok"
+
+# ---- Opcode: CALL/RET ----
+cpu is new_cpu of null
+mem is new_memory of null
+cpu.pc is 0x0100
+cpu.sp is 0xFFFE
+load_bytes of [mem, 0x0100, [0xCD, 0x50, 0x01]]
+load_bytes of [mem, 0x0150, [0xC9]]
+exec_op of [cpu, mem]
+assert of [cpu.pc == 0x0150, "CALL jumped to 0x0150"]
+assert of [cpu.sp == 0xFFFC, "SP decremented by 2"]
+exec_op of [cpu, mem]
+assert of [cpu.pc == 0x0103, f"RET returned to 0x0103, got 0x{cpu.pc}"]
+assert of [cpu.sp == 0xFFFE, "SP restored"]
+print of "  CALL/RET: ok"
+
+# ---- Opcode: PUSH/POP BC ----
+cpu is new_cpu of null
+mem is new_memory of null
+cpu.sp is 0xFFFE
+set_bc of [cpu, 0x1234]
+cpu.pc is 0x0100
+load_bytes of [mem, 0x0100, [0xC5, 0xC1]]
+exec_op of [cpu, mem]
+assert of [cpu.sp == 0xFFFC, "PUSH SP-=2"]
+set_bc of [cpu, 0x0000]
+exec_op of [cpu, mem]
+assert of [get_bc of cpu == 0x1234, f"POP BC = 0x1234, got 0x{get_bc of cpu}"]
+print of "  PUSH/POP: ok"
+
+# ---- CB prefix: SWAP A ----
+cpu is new_cpu of null
+mem is new_memory of null
+cpu.pc is 0x0100
+cpu.a is 0xF1
+load_bytes of [mem, 0x0100, [0xCB, 0x37]]
+exec_op of [cpu, mem]
+assert of [cpu.a == 0x1F, f"SWAP 0xF1 = 0x1F, got 0x{cpu.a}"]
+print of "  CB SWAP: ok"
+
+# ---- CB prefix: BIT 7, A ----
+cpu is new_cpu of null
+mem is new_memory of null
+cpu.pc is 0x0100
+cpu.a is 0x80
+load_bytes of [mem, 0x0100, [0xCB, 0x7F]]
+exec_op of [cpu, mem]
+assert of [(flag_z of cpu) == 0, "BIT 7 of 0x80 = not zero"]
+cpu.pc is 0x0100
+cpu.a is 0x7F
+exec_op of [cpu, mem]
+assert of [(flag_z of cpu) == 1, "BIT 7 of 0x7F = zero"]
+print of "  CB BIT: ok"
+
+print of "\n=== All CPU tests passed ==="

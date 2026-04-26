@@ -1,0 +1,385 @@
+# ============================================================
+# DMG CPU — Sharp SM83 (Game Boy CPU core)
+# ============================================================
+# Registers: A, F(flags), B, C, D, E, H, L, SP, PC
+# Flags in F register: Z(bit7) N(bit6) H(bit5) C(bit4)
+# All values masked to 8-bit (0xFF) or 16-bit (0xFFFF)
+
+# Flag bit positions
+FLAG_Z is 128
+FLAG_N is 64
+FLAG_H is 32
+FLAG_C is 16
+
+define new_cpu() as:
+    return {
+        "a": 0, "f": 0,
+        "b": 0, "c": 0,
+        "d": 0, "e": 0,
+        "h": 0, "l": 0,
+        "sp": 0, "pc": 0,
+        "ime": 0,
+        "halted": 0,
+        "cycles": 0,
+        "stopped": 0
+    }
+
+# Post-boot state (after bootrom)
+define cpu_reset(cpu) as:
+    cpu.a is 0x01
+    cpu.f is 0xB0
+    cpu.b is 0x00
+    cpu.c is 0x13
+    cpu.d is 0x00
+    cpu.e is 0xD8
+    cpu.h is 0x01
+    cpu.l is 0x4D
+    cpu.sp is 0xFFFE
+    cpu.pc is 0x0100
+    cpu.ime is 1
+    cpu.halted is 0
+    cpu.cycles is 0
+
+# ---- Register pair helpers ----
+
+define get_af(cpu) as:
+    return bit_or of [bit_shl of [cpu.a, 8], bit_and of [cpu.f, 0xF0]]
+
+define set_af(cpu, val) as:
+    cpu.a is bit_and of [bit_shr of [val, 8], 0xFF]
+    cpu.f is bit_and of [val, 0xF0]
+
+define get_bc(cpu) as:
+    return bit_or of [bit_shl of [cpu.b, 8], cpu.c]
+
+define set_bc(cpu, val) as:
+    cpu.b is bit_and of [bit_shr of [val, 8], 0xFF]
+    cpu.c is bit_and of [val, 0xFF]
+
+define get_de(cpu) as:
+    return bit_or of [bit_shl of [cpu.d, 8], cpu.e]
+
+define set_de(cpu, val) as:
+    cpu.d is bit_and of [bit_shr of [val, 8], 0xFF]
+    cpu.e is bit_and of [val, 0xFF]
+
+define get_hl(cpu) as:
+    return bit_or of [bit_shl of [cpu.h, 8], cpu.l]
+
+define set_hl(cpu, val) as:
+    cpu.h is bit_and of [bit_shr of [val, 8], 0xFF]
+    cpu.l is bit_and of [val, 0xFF]
+
+# ---- Flag helpers ----
+
+define flag_z(cpu) as:
+    if bit_and of [cpu.f, FLAG_Z] != 0:
+        return 1
+    return 0
+
+define flag_n(cpu) as:
+    if bit_and of [cpu.f, FLAG_N] != 0:
+        return 1
+    return 0
+
+define flag_h(cpu) as:
+    if bit_and of [cpu.f, FLAG_H] != 0:
+        return 1
+    return 0
+
+define flag_c(cpu) as:
+    if bit_and of [cpu.f, FLAG_C] != 0:
+        return 1
+    return 0
+
+define set_flags(cpu, z, n, h, c) as:
+    f is 0
+    if z == 1:
+        f is bit_or of [f, FLAG_Z]
+    if n == 1:
+        f is bit_or of [f, FLAG_N]
+    if h == 1:
+        f is bit_or of [f, FLAG_H]
+    if c == 1:
+        f is bit_or of [f, FLAG_C]
+    cpu.f is f
+
+# ---- Fetch helpers ----
+
+define fetch8(cpu, mem) as:
+    val is mem_read of [mem, cpu.pc]
+    cpu.pc is bit_and of [cpu.pc + 1, 0xFFFF]
+    return val
+
+define fetch16(cpu, mem) as:
+    lo is mem_read of [mem, cpu.pc]
+    cpu.pc is bit_and of [cpu.pc + 1, 0xFFFF]
+    hi is mem_read of [mem, cpu.pc]
+    cpu.pc is bit_and of [cpu.pc + 1, 0xFFFF]
+    return bit_or of [bit_shl of [hi, 8], lo]
+
+# ---- ALU operations ----
+
+define alu_add(cpu, val) as:
+    result is cpu.a + val
+    half is (bit_and of [cpu.a, 0x0F]) + (bit_and of [val, 0x0F])
+    cpu.a is bit_and of [result, 0xFF]
+    z is 0
+    if cpu.a == 0:
+        z is 1
+    h is 0
+    if half > 0x0F:
+        h is 1
+    c is 0
+    if result > 0xFF:
+        c is 1
+    set_flags of [cpu, z, 0, h, c]
+
+define alu_adc(cpu, val) as:
+    carry is flag_c of cpu
+    result is cpu.a + val + carry
+    half is (bit_and of [cpu.a, 0x0F]) + (bit_and of [val, 0x0F]) + carry
+    cpu.a is bit_and of [result, 0xFF]
+    z is 0
+    if cpu.a == 0:
+        z is 1
+    h is 0
+    if half > 0x0F:
+        h is 1
+    c is 0
+    if result > 0xFF:
+        c is 1
+    set_flags of [cpu, z, 0, h, c]
+
+define alu_sub(cpu, val) as:
+    result is cpu.a - val
+    half is (bit_and of [cpu.a, 0x0F]) - (bit_and of [val, 0x0F])
+    cpu.a is bit_and of [result, 0xFF]
+    z is 0
+    if cpu.a == 0:
+        z is 1
+    h is 0
+    if half < 0:
+        h is 1
+    c is 0
+    if result < 0:
+        c is 1
+    set_flags of [cpu, z, 1, h, c]
+
+define alu_sbc(cpu, val) as:
+    carry is flag_c of cpu
+    result is cpu.a - val - carry
+    half is (bit_and of [cpu.a, 0x0F]) - (bit_and of [val, 0x0F]) - carry
+    cpu.a is bit_and of [result, 0xFF]
+    z is 0
+    if cpu.a == 0:
+        z is 1
+    h is 0
+    if half < 0:
+        h is 1
+    c is 0
+    if result < 0:
+        c is 1
+    set_flags of [cpu, z, 1, h, c]
+
+define alu_and(cpu, val) as:
+    cpu.a is bit_and of [cpu.a, val]
+    z is 0
+    if cpu.a == 0:
+        z is 1
+    set_flags of [cpu, z, 0, 1, 0]
+
+define alu_xor(cpu, val) as:
+    cpu.a is bit_xor of [cpu.a, val]
+    z is 0
+    if cpu.a == 0:
+        z is 1
+    set_flags of [cpu, z, 0, 0, 0]
+
+define alu_or(cpu, val) as:
+    cpu.a is bit_or of [cpu.a, val]
+    z is 0
+    if cpu.a == 0:
+        z is 1
+    set_flags of [cpu, z, 0, 0, 0]
+
+define alu_cp(cpu, val) as:
+    result is cpu.a - val
+    half is (bit_and of [cpu.a, 0x0F]) - (bit_and of [val, 0x0F])
+    z is 0
+    if bit_and of [result, 0xFF] == 0:
+        z is 1
+    h is 0
+    if half < 0:
+        h is 1
+    c is 0
+    if result < 0:
+        c is 1
+    set_flags of [cpu, z, 1, h, c]
+
+define alu_inc(cpu, val) as:
+    result is bit_and of [val + 1, 0xFF]
+    z is 0
+    if result == 0:
+        z is 1
+    h is 0
+    if bit_and of [val, 0x0F] == 0x0F:
+        h is 1
+    # C flag preserved
+    cpu.f is bit_or of [bit_and of [cpu.f, FLAG_C], 0]
+    if z == 1:
+        cpu.f is bit_or of [cpu.f, FLAG_Z]
+    if h == 1:
+        cpu.f is bit_or of [cpu.f, FLAG_H]
+    return result
+
+define alu_dec(cpu, val) as:
+    result is bit_and of [val - 1, 0xFF]
+    z is 0
+    if result == 0:
+        z is 1
+    h is 0
+    if bit_and of [val, 0x0F] == 0:
+        h is 1
+    cpu.f is bit_or of [bit_and of [cpu.f, FLAG_C], FLAG_N]
+    if z == 1:
+        cpu.f is bit_or of [cpu.f, FLAG_Z]
+    if h == 1:
+        cpu.f is bit_or of [cpu.f, FLAG_H]
+    return result
+
+# ---- 16-bit ADD HL ----
+
+define alu_add_hl(cpu, val) as:
+    hl is get_hl of cpu
+    result is hl + val
+    half is (bit_and of [hl, 0x0FFF]) + (bit_and of [val, 0x0FFF])
+    set_hl of [cpu, bit_and of [result, 0xFFFF]]
+    # Z flag preserved
+    z is flag_z of cpu
+    h is 0
+    if half > 0x0FFF:
+        h is 1
+    c is 0
+    if result > 0xFFFF:
+        c is 1
+    set_flags of [cpu, z, 0, h, c]
+
+# ---- Rotate/shift helpers ----
+
+define alu_rlc(cpu, val) as:
+    bit7 is bit_shr of [val, 7]
+    result is bit_and of [bit_or of [bit_shl of [val, 1], bit7], 0xFF]
+    z is 0
+    if result == 0:
+        z is 1
+    set_flags of [cpu, z, 0, 0, bit7]
+    return result
+
+define alu_rrc(cpu, val) as:
+    bit0 is bit_and of [val, 1]
+    result is bit_and of [bit_or of [bit_shr of [val, 1], bit_shl of [bit0, 7]], 0xFF]
+    z is 0
+    if result == 0:
+        z is 1
+    set_flags of [cpu, z, 0, 0, bit0]
+    return result
+
+define alu_rl(cpu, val) as:
+    old_c is flag_c of cpu
+    bit7 is bit_shr of [val, 7]
+    result is bit_and of [bit_or of [bit_shl of [val, 1], old_c], 0xFF]
+    z is 0
+    if result == 0:
+        z is 1
+    set_flags of [cpu, z, 0, 0, bit7]
+    return result
+
+define alu_rr(cpu, val) as:
+    old_c is flag_c of cpu
+    bit0 is bit_and of [val, 1]
+    result is bit_and of [bit_or of [bit_shr of [val, 1], bit_shl of [old_c, 7]], 0xFF]
+    z is 0
+    if result == 0:
+        z is 1
+    set_flags of [cpu, z, 0, 0, bit0]
+    return result
+
+define alu_sla(cpu, val) as:
+    bit7 is bit_shr of [val, 7]
+    result is bit_and of [bit_shl of [val, 1], 0xFF]
+    z is 0
+    if result == 0:
+        z is 1
+    set_flags of [cpu, z, 0, 0, bit7]
+    return result
+
+define alu_sra(cpu, val) as:
+    bit0 is bit_and of [val, 1]
+    bit7 is bit_and of [val, 0x80]
+    result is bit_and of [bit_or of [bit_shr of [val, 1], bit7], 0xFF]
+    z is 0
+    if result == 0:
+        z is 1
+    set_flags of [cpu, z, 0, 0, bit0]
+    return result
+
+define alu_swap(cpu, val) as:
+    result is bit_or of [bit_shr of [val, 4], bit_and of [bit_shl of [val, 4], 0xF0]]
+    z is 0
+    if result == 0:
+        z is 1
+    set_flags of [cpu, z, 0, 0, 0]
+    return result
+
+define alu_srl(cpu, val) as:
+    bit0 is bit_and of [val, 1]
+    result is bit_shr of [val, 1]
+    z is 0
+    if result == 0:
+        z is 1
+    set_flags of [cpu, z, 0, 0, bit0]
+    return result
+
+define alu_bit(cpu, bit, val) as:
+    mask is bit_shl of [1, bit]
+    z is 0
+    if bit_and of [val, mask] == 0:
+        z is 1
+    # N=0, H=1, C preserved
+    cpu.f is bit_or of [bit_and of [cpu.f, FLAG_C], FLAG_H]
+    if z == 1:
+        cpu.f is bit_or of [cpu.f, FLAG_Z]
+
+define alu_set(bit, val) as:
+    return bit_or of [val, bit_shl of [1, bit]]
+
+define alu_res(bit, val) as:
+    return bit_and of [val, bit_xor of [0xFF, bit_shl of [1, bit]]]
+
+# ---- DAA (decimal adjust) ----
+
+define alu_daa(cpu) as:
+    a is cpu.a
+    n is flag_n of cpu
+    h is flag_h of cpu
+    c is flag_c of cpu
+    new_c is c
+
+    if n == 0:
+        if c == 1 or a > 0x99:
+            a is a + 0x60
+            new_c is 1
+        if h == 1 or bit_and of [a, 0x0F] > 0x09:
+            a is a + 0x06
+    else:
+        if c == 1:
+            a is a - 0x60
+        if h == 1:
+            a is a - 0x06
+
+    cpu.a is bit_and of [a, 0xFF]
+    z is 0
+    if cpu.a == 0:
+        z is 1
+    set_flags of [cpu, z, n, 0, new_c]

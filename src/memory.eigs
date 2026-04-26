@@ -1,0 +1,167 @@
+# ============================================================
+# DMG Memory — 64KB address space with memory-mapped I/O
+# ============================================================
+# 0000-3FFF: ROM Bank 0 (16KB)
+# 4000-7FFF: ROM Bank N (switchable, 16KB)
+# 8000-9FFF: VRAM (8KB)
+# A000-BFFF: External RAM (8KB, switchable)
+# C000-DFFF: Work RAM (8KB)
+# E000-FDFF: Echo of C000-DDFF
+# FE00-FE9F: OAM (sprite attribute table)
+# FEA0-FEFF: Unusable
+# FF00-FF7F: I/O registers
+# FF80-FFFE: High RAM (HRAM)
+# FFFF: Interrupt enable register
+
+define new_memory() as:
+    # Flat 64KB array — will be slow but correct
+    mem is []
+    for i in range of 65536:
+        append of [mem, 0]
+    return {
+        "data": mem,
+        "rom": [],
+        "rom_bank": 1,
+        "ram_bank": 0,
+        "ram_enable": 0,
+        "mbc_type": 0,
+        "serial_output": "",
+        "ie": 0,
+        "if_reg": 0
+    }
+
+define load_rom(mem, path) as:
+    bytes is read_bytes of path
+    if bytes == null:
+        print of f"Failed to load ROM: {path}"
+        return 0
+    mem.rom is bytes
+    rom_len is len of bytes
+
+    # Copy first 32KB into memory (bank 0 + bank 1)
+    limit is rom_len
+    if limit > 32768:
+        limit is 32768
+    for i in range of limit:
+        mem.data[i] is bytes[i]
+
+    # Detect MBC type from cartridge header (0x0147)
+    if rom_len > 0x0148:
+        cart_type is bytes[0x0147]
+        if cart_type >= 1 and cart_type <= 3:
+            mem.mbc_type is 1
+        elif cart_type >= 0x0F and cart_type <= 0x13:
+            mem.mbc_type is 3
+        elif cart_type >= 0x19 and cart_type <= 0x1E:
+            mem.mbc_type is 5
+
+    title is ""
+    for i in range of 16:
+        ch is bytes[0x0134 + i]
+        if ch >= 32 and ch <= 126:
+            title is f"{title}{chr of ch}"
+    print of f"ROM loaded: {title} ({rom_len} bytes, MBC{mem.mbc_type})"
+    return 1
+
+define mem_read(mem, addr) as:
+    addr is bit_and of [addr, 0xFFFF]
+
+    # ROM bank 0
+    if addr < 0x4000:
+        return mem.data[addr]
+
+    # ROM bank N (switchable)
+    if addr < 0x8000:
+        if mem.mbc_type > 0 and (len of mem.rom) > 0:
+            rom_addr is (mem.rom_bank * 0x4000) + (addr - 0x4000)
+            if rom_addr < (len of mem.rom):
+                return mem.rom[rom_addr]
+        return mem.data[addr]
+
+    # Echo RAM
+    if addr >= 0xE000 and addr < 0xFE00:
+        return mem.data[addr - 0x2000]
+
+    # IE register
+    if addr == 0xFFFF:
+        return mem.ie
+
+    # IF register
+    if addr == 0xFF0F:
+        return mem.if_reg
+
+    return mem.data[addr]
+
+define mem_write(mem, addr, val) as:
+    addr is bit_and of [addr, 0xFFFF]
+    val is bit_and of [val, 0xFF]
+
+    # ROM area — MBC register writes
+    if addr < 0x8000:
+        if mem.mbc_type == 1:
+            if addr < 0x2000:
+                mem.ram_enable is bit_and of [val, 0x0F] == 0x0A
+            elif addr < 0x4000:
+                bank is bit_and of [val, 0x1F]
+                if bank == 0:
+                    bank is 1
+                mem.rom_bank is bank
+                # Update ROM bank mapping
+                if (len of mem.rom) > mem.rom_bank * 0x4000:
+                    for i in range of 0x4000:
+                        src is mem.rom_bank * 0x4000 + i
+                        if src < (len of mem.rom):
+                            mem.data[0x4000 + i] is mem.rom[src]
+            elif addr < 0x6000:
+                mem.ram_bank is bit_and of [val, 0x03]
+        elif mem.mbc_type == 3:
+            if addr < 0x2000:
+                mem.ram_enable is bit_and of [val, 0x0F] == 0x0A
+            elif addr < 0x4000:
+                bank is bit_and of [val, 0x7F]
+                if bank == 0:
+                    bank is 1
+                mem.rom_bank is bank
+                if (len of mem.rom) > mem.rom_bank * 0x4000:
+                    for i in range of 0x4000:
+                        src is mem.rom_bank * 0x4000 + i
+                        if src < (len of mem.rom):
+                            mem.data[0x4000 + i] is mem.rom[src]
+        return null
+
+    # Echo RAM
+    if addr >= 0xE000 and addr < 0xFE00:
+        mem.data[addr - 0x2000] is val
+        return null
+
+    # IE register
+    if addr == 0xFFFF:
+        mem.ie is val
+        return null
+
+    # IF register
+    if addr == 0xFF0F:
+        mem.if_reg is val
+        return null
+
+    # Serial port (0xFF01/0xFF02) — capture output for Blargg test ROMs
+    if addr == 0xFF01:
+        mem.data[addr] is val
+        return null
+    if addr == 0xFF02:
+        if val == 0x81:
+            ch is mem.data[0xFF01]
+            mem.serial_output is f"{mem.serial_output}{chr of ch}"
+        mem.data[addr] is val
+        return null
+
+    # DMA transfer (0xFF46)
+    if addr == 0xFF46:
+        src is bit_shl of [val, 8]
+        for i in range of 160:
+            mem.data[0xFE00 + i] is mem_read of [mem, src + i]
+        mem.data[addr] is val
+        return null
+
+    # Normal write
+    mem.data[addr] is val

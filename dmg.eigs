@@ -1,0 +1,193 @@
+# ============================================================
+# DMG — Game Boy emulator in EigenScript
+# ============================================================
+# Headless mode: runs ROM, captures serial output (for Blargg tests)
+#
+# Usage: eigenscript dmg.eigs <rom_path> [--cycles N]
+
+load_file of "src/cpu.eigs"
+load_file of "src/memory.eigs"
+load_file of "src/opcodes.eigs"
+
+# ============================================================
+# Timer registers
+# ============================================================
+
+TIMER_DIV  is 0xFF04
+TIMER_TIMA is 0xFF05
+TIMER_TMA  is 0xFF06
+TIMER_TAC  is 0xFF07
+
+define timer_step(mem, cycles) as:
+    # DIV increments at 16384 Hz (every 256 T-cycles)
+    div_val is mem.data[TIMER_DIV]
+    # Approximate: increment DIV every 256 cycles
+    mem.data[TIMER_DIV] is bit_and of [div_val + floor of (cycles / 4), 0xFF]
+
+    tac is mem.data[TIMER_TAC]
+    if bit_and of [tac, 0x04] == 0:
+        return null
+
+    # Timer frequency from TAC bits 0-1
+    freq_bits is bit_and of [tac, 0x03]
+    threshold is 1024
+    match freq_bits:
+        case 0:
+            threshold is 1024
+        case 1:
+            threshold is 16
+        case 2:
+            threshold is 64
+        case 3:
+            threshold is 256
+
+    # Simple: check if TIMA should increment
+    tima is mem.data[TIMER_TIMA]
+    tima is tima + floor of (cycles / (threshold / 4))
+    if tima > 0xFF:
+        tima is mem.data[TIMER_TMA]
+        mem.if_reg is bit_or of [mem.if_reg, 0x04]
+    mem.data[TIMER_TIMA] is bit_and of [tima, 0xFF]
+
+# ============================================================
+# Interrupt handling
+# ============================================================
+
+INT_VBLANK  is 0x01
+INT_STAT    is 0x02
+INT_TIMER   is 0x04
+INT_SERIAL  is 0x08
+INT_JOYPAD  is 0x10
+
+define handle_interrupts(cpu, mem) as:
+    if cpu.ime == 0 and cpu.halted == 0:
+        return 0
+    pending is bit_and of [mem.ie, mem.if_reg]
+    if pending == 0:
+        return 0
+
+    # Wake from halt even if IME is off
+    if cpu.halted == 1:
+        cpu.halted is 0
+        if cpu.ime == 0:
+            return 0
+
+    cpu.ime is 0
+
+    # Priority: VBlank > STAT > Timer > Serial > Joypad
+    if bit_and of [pending, INT_VBLANK] != 0:
+        mem.if_reg is bit_and of [mem.if_reg, bit_xor of [0xFF, INT_VBLANK]]
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x0040
+        return 20
+    if bit_and of [pending, INT_STAT] != 0:
+        mem.if_reg is bit_and of [mem.if_reg, bit_xor of [0xFF, INT_STAT]]
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x0048
+        return 20
+    if bit_and of [pending, INT_TIMER] != 0:
+        mem.if_reg is bit_and of [mem.if_reg, bit_xor of [0xFF, INT_TIMER]]
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x0050
+        return 20
+    if bit_and of [pending, INT_SERIAL] != 0:
+        mem.if_reg is bit_and of [mem.if_reg, bit_xor of [0xFF, INT_SERIAL]]
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x0058
+        return 20
+    if bit_and of [pending, INT_JOYPAD] != 0:
+        mem.if_reg is bit_and of [mem.if_reg, bit_xor of [0xFF, INT_JOYPAD]]
+        push16 of [cpu, mem, cpu.pc]
+        cpu.pc is 0x0060
+        return 20
+    return 0
+
+# ============================================================
+# Main loop
+# ============================================================
+
+argv is args of null
+if (len of argv) < 2:
+    print of "Usage: eigenscript dmg.eigs <rom_path> [--cycles N]"
+    exit of 1
+
+rom_path is argv[1]
+max_cycles is 50000000
+
+i is 2
+loop while i < (len of argv):
+    if argv[i] == "--cycles":
+        i is i + 1
+        max_cycles is num of argv[i]
+    i is i + 1
+
+cpu is new_cpu of null
+mem is new_memory of null
+cpu_reset of cpu
+
+if (load_rom of [mem, rom_path]) == 0:
+    exit of 1
+
+# Initialize timer and I/O registers to post-boot state
+mem.data[TIMER_DIV] is 0xAB
+mem.data[0xFF10] is 0x80
+mem.data[0xFF11] is 0xBF
+mem.data[0xFF12] is 0xF3
+mem.data[0xFF14] is 0xBF
+mem.data[0xFF16] is 0x3F
+mem.data[0xFF19] is 0xBF
+mem.data[0xFF1A] is 0x7F
+mem.data[0xFF1B] is 0xFF
+mem.data[0xFF1C] is 0x9F
+mem.data[0xFF1E] is 0xBF
+mem.data[0xFF20] is 0xFF
+mem.data[0xFF23] is 0xBF
+mem.data[0xFF24] is 0x77
+mem.data[0xFF25] is 0xF3
+mem.data[0xFF26] is 0xF1
+mem.data[0xFF40] is 0x91
+mem.data[0xFF47] is 0xFC
+mem.data[0xFF48] is 0xFF
+mem.data[0xFF49] is 0xFF
+
+total_cycles is 0
+t0 is monotonic_ms of null
+
+loop while total_cycles < max_cycles:
+    if cpu.halted == 1:
+        cycles is 4
+        timer_step of [mem, cycles]
+        int_cycles is handle_interrupts of [cpu, mem]
+        total_cycles is total_cycles + cycles + int_cycles
+        continue
+
+    if cpu.stopped == 1:
+        break
+
+    unobserved:
+        cycles is exec_op of [cpu, mem]
+        total_cycles is total_cycles + cycles
+        timer_step of [mem, cycles]
+        int_cycles is handle_interrupts of [cpu, mem]
+        total_cycles is total_cycles + int_cycles
+
+    # Check for Blargg test output (serial)
+    if (len of mem.serial_output) > 0:
+        # Check for "Passed" or "Failed" in output
+        if contains of [mem.serial_output, "Passed"]:
+            print of f"\n{mem.serial_output}"
+            break
+        if contains of [mem.serial_output, "Failed"]:
+            print of f"\n{mem.serial_output}"
+            break
+
+t1 is monotonic_ms of null
+elapsed is t1 - t0
+
+print of f"\nCycles: {total_cycles}"
+print of f"Time: {elapsed}ms"
+if elapsed > 0:
+    mhz is (total_cycles / (elapsed / 1000)) / 1000000
+    print of f"Speed: {mhz} MHz (GB is 4.19 MHz)"
+if (len of mem.serial_output) > 0:
+    print of f"Serial output: {mem.serial_output}"
