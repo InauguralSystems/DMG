@@ -14,12 +14,8 @@
 # FFFF: Interrupt enable register
 
 define new_memory() as:
-    # Flat 64KB array — will be slow but correct
-    mem is []
-    for i in range of 65536:
-        append of [mem, 0]
     return {
-        "data": mem,
+        "data": fill of [65536, 0],
         "rom": [],
         "rom_bank": 1,
         "ram_bank": 0,
