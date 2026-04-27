@@ -153,6 +153,7 @@ mem.data[0xFF49] is 0xFF
 total_cycles is 0
 t0 is monotonic_ms of null
 
+prev_serial_len is 0
 loop while total_cycles < max_cycles:
     if cpu.halted == 1:
         cycles is 4
@@ -164,16 +165,16 @@ loop while total_cycles < max_cycles:
     if cpu.stopped == 1:
         break
 
-    unobserved:
-        cycles is exec_op of [cpu, mem]
-        total_cycles is total_cycles + cycles
-        timer_step of [mem, cycles]
-        int_cycles is handle_interrupts of [cpu, mem]
-        total_cycles is total_cycles + int_cycles
+    cycles is exec_op of [cpu, mem]
+    total_cycles is total_cycles + cycles
+    timer_step of [mem, cycles]
+    int_cycles is handle_interrupts of [cpu, mem]
+    total_cycles is total_cycles + int_cycles
 
-    # Check for Blargg test output (serial)
-    if (len of mem.serial_output) > 0:
-        # Check for "Passed" or "Failed" in output
+    # Check for Blargg test output (serial) — only when output changes
+    cur_len is len of mem.serial_output
+    if cur_len > prev_serial_len:
+        prev_serial_len is cur_len
         if contains of [mem.serial_output, "Passed"]:
             print of f"\n{mem.serial_output}"
             break

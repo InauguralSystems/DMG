@@ -15,7 +15,7 @@
 
 define new_memory() as:
     return {
-        "data": fill of [65536, 0],
+        "data": buffer of 65536,
         "rom": [],
         "rom_bank": 1,
         "ram_bank": 0,
