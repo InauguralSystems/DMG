@@ -210,16 +210,16 @@ loop while total_cycles < max_cycles:
         total_cycles is total_cycles + int_cycles
         _pending_cycles is 0
 
-    # Check for Blargg test output (serial) — only when output changes
-    cur_len is len of mem.serial_output
-    if cur_len > prev_serial_len:
-        prev_serial_len is cur_len
-        if contains of [mem.serial_output, "Passed"]:
-            print of f"\n{mem.serial_output}"
-            break
-        if contains of [mem.serial_output, "Failed"]:
-            print of f"\n{mem.serial_output}"
-            break
+    # Check for Blargg test output every 1M cycles
+    if total_cycles % 1000000 < 100:
+        if (len of mem.serial_output) > prev_serial_len:
+            prev_serial_len is len of mem.serial_output
+            if contains of [mem.serial_output, "Passed"]:
+                print of f"\n{mem.serial_output}"
+                break
+            if contains of [mem.serial_output, "Failed"]:
+                print of f"\n{mem.serial_output}"
+                break
 
 print of f"\nLoop exited: cycles={total_cycles} halted={cpu.halted} stopped={cpu.stopped} PC={cpu.pc}"
 print of f"IE={mem.ie} IF={mem.if_reg} IME={cpu.ime} LY={mem.data[0xFF44]}"
