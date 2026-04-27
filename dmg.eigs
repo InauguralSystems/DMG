@@ -107,26 +107,26 @@ define handle_interrupts(cpu, mem) as:
 # ============================================================
 
 argv is args of null
-if (len of argv) < 2:
+if (len of argv) < 1:
     print of "Usage: eigenscript dmg.eigs <rom_path> [--cycles N]"
-    exit of 1
+    assert of [0, "no ROM path provided"]
 
-rom_path is argv[1]
+rom_path is argv[0]
 max_cycles is 50000000
 
-i is 2
+i is 1
 loop while i < (len of argv):
-    if argv[i] == "--cycles":
+    if argv[i] == "--cycles" and i + 1 < (len of argv):
         i is i + 1
-        max_cycles is num of argv[i]
+        max_cycles is floor of (num of argv[i])
     i is i + 1
 
 cpu is new_cpu of null
 mem is new_memory of null
 cpu_reset of cpu
 
-if (load_rom of [mem, rom_path]) == 0:
-    exit of 1
+loaded is load_rom of [mem, rom_path]
+assert of [loaded == 1, f"Failed to load ROM: {rom_path}"]
 
 # Initialize timer and I/O registers to post-boot state
 mem.data[TIMER_DIV] is 0xAB
