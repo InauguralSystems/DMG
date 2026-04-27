@@ -18,36 +18,63 @@ TIMER_TIMA is 0xFF05
 TIMER_TMA  is 0xFF06
 TIMER_TAC  is 0xFF07
 
-define timer_step(mem, cycles) as:
-    # DIV increments at 16384 Hz (every 256 T-cycles)
-    div_val is mem.data[TIMER_DIV]
-    # Approximate: increment DIV every 256 cycles
-    mem.data[TIMER_DIV] is bit_and of [div_val + floor of (cycles / 4), 0xFF]
+# Internal cycle counters (not memory-mapped)
+_div_counter is 0
+_timer_counter is 0
 
+# TAC frequency → T-cycle thresholds
+# Mode 0: 4096 Hz = every 1024 T-cycles
+# Mode 1: 262144 Hz = every 16 T-cycles
+# Mode 2: 65536 Hz = every 64 T-cycles
+# Mode 3: 16384 Hz = every 256 T-cycles
+_tac_thresholds is [1024, 16, 64, 256]
+
+define timer_step(mem, cycles) as:
+    # DIV: increments every 256 T-cycles
+    _div_counter is _div_counter + cycles
+    if _div_counter >= 256:
+        mem.data[TIMER_DIV] is bit_and of [mem.data[TIMER_DIV] + floor of (_div_counter / 256), 0xFF]
+        _div_counter is _div_counter % 256
+
+    # TIMA: only runs if TAC bit 2 is set
     tac is mem.data[TIMER_TAC]
-    if bit_and of [tac, 0x04] == 0:
+    if (bit_and of [tac, 0x04]) == 0:
         return null
 
-    # Timer frequency from TAC bits 0-1
-    freq_bits is bit_and of [tac, 0x03]
-    threshold is 1024
-    match freq_bits:
-        case 0:
-            threshold is 1024
-        case 1:
-            threshold is 16
-        case 2:
-            threshold is 64
-        case 3:
-            threshold is 256
+    threshold is _tac_thresholds[bit_and of [tac, 0x03]]
+    _timer_counter is _timer_counter + cycles
 
-    # Simple: check if TIMA should increment
-    tima is mem.data[TIMER_TIMA]
-    tima is tima + floor of (cycles / (threshold / 4))
-    if tima > 0xFF:
-        tima is mem.data[TIMER_TMA]
-        mem.if_reg is bit_or of [mem.if_reg, 0x04]
-    mem.data[TIMER_TIMA] is bit_and of [tima, 0xFF]
+    loop while _timer_counter >= threshold:
+        _timer_counter is _timer_counter - threshold
+        tima is mem.data[TIMER_TIMA] + 1
+        if tima > 0xFF:
+            mem.data[TIMER_TIMA] is mem.data[TIMER_TMA]
+            mem.if_reg is bit_or of [mem.if_reg, 0x04]
+        else:
+            mem.data[TIMER_TIMA] is tima
+
+# ============================================================
+# LCD / VBlank timing
+# ============================================================
+# VBlank fires every 70224 T-cycles (once per frame at ~59.7 Hz)
+# LY register (0xFF44) counts scanlines 0-153
+
+CYCLES_PER_LINE is 456
+LINES_PER_FRAME is 154
+VBLANK_START_LINE is 144
+
+_scanline_counter is 0
+
+define lcd_step(mem, cycles) as:
+    _scanline_counter is _scanline_counter + cycles
+    if _scanline_counter >= CYCLES_PER_LINE:
+        _scanline_counter is _scanline_counter - CYCLES_PER_LINE
+        ly is mem.data[0xFF44] + 1
+        if ly >= LINES_PER_FRAME:
+            ly is 0
+        mem.data[0xFF44] is ly
+        if ly == VBLANK_START_LINE:
+            mem.if_reg is bit_or of [mem.if_reg, 0x01]
 
 # ============================================================
 # Interrupt handling
@@ -151,15 +178,21 @@ mem.data[0xFF48] is 0xFF
 mem.data[0xFF49] is 0xFF
 
 total_cycles is 0
+_pending_cycles is 0
 t0 is monotonic_ms of null
 
 prev_serial_len is 0
 loop while total_cycles < max_cycles:
     if cpu.halted == 1:
-        cycles is 4
-        timer_step of [mem, cycles]
+        # Advance one scanline at a time until an interrupt fires
+        skip is CYCLES_PER_LINE - _scanline_counter
+        if skip < 4:
+            skip is 4
+        timer_step of [mem, skip]
+        lcd_step of [mem, skip]
+        total_cycles is total_cycles + skip
         int_cycles is handle_interrupts of [cpu, mem]
-        total_cycles is total_cycles + cycles + int_cycles
+        total_cycles is total_cycles + int_cycles
         continue
 
     if cpu.stopped == 1:
@@ -167,9 +200,15 @@ loop while total_cycles < max_cycles:
 
     cycles is exec_op of [cpu, mem]
     total_cycles is total_cycles + cycles
-    timer_step of [mem, cycles]
-    int_cycles is handle_interrupts of [cpu, mem]
-    total_cycles is total_cycles + int_cycles
+
+    # Batch timing: accumulate cycles, step timer/lcd periodically
+    _pending_cycles is _pending_cycles + cycles
+    if _pending_cycles >= 64:
+        timer_step of [mem, _pending_cycles]
+        lcd_step of [mem, _pending_cycles]
+        int_cycles is handle_interrupts of [cpu, mem]
+        total_cycles is total_cycles + int_cycles
+        _pending_cycles is 0
 
     # Check for Blargg test output (serial) — only when output changes
     cur_len is len of mem.serial_output
@@ -182,6 +221,8 @@ loop while total_cycles < max_cycles:
             print of f"\n{mem.serial_output}"
             break
 
+print of f"\nLoop exited: cycles={total_cycles} halted={cpu.halted} stopped={cpu.stopped} PC={cpu.pc}"
+print of f"IE={mem.ie} IF={mem.if_reg} IME={cpu.ime} LY={mem.data[0xFF44]}"
 t1 is monotonic_ms of null
 elapsed is t1 - t0
 
