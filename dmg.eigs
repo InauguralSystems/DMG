@@ -22,7 +22,7 @@ TIMER_TAC  is 0xFF07
 _div_counter is 0
 _timer_counter is 0
 
-# TAC frequency → T-cycle thresholds
+# TAC frequency -> T-cycle thresholds
 # Mode 0: 4096 Hz = every 1024 T-cycles
 # Mode 1: 262144 Hz = every 16 T-cycles
 # Mode 2: 65536 Hz = every 64 T-cycles
@@ -33,15 +33,15 @@ define timer_step(mem, cycles) as:
     # DIV: increments every 256 T-cycles
     _div_counter is _div_counter + cycles
     if _div_counter >= 256:
-        mem.data[TIMER_DIV] is bit_and of [mem.data[TIMER_DIV] + floor of (_div_counter / 256), 0xFF]
+        mem.data[TIMER_DIV] is (mem.data[TIMER_DIV] + floor of (_div_counter / 256)) & 0xFF
         _div_counter is _div_counter % 256
 
     # TIMA: only runs if TAC bit 2 is set
     tac is mem.data[TIMER_TAC]
-    if (bit_and of [tac, 0x04]) == 0:
+    if (tac & 0x04) == 0:
         return null
 
-    threshold is _tac_thresholds[bit_and of [tac, 0x03]]
+    threshold is _tac_thresholds[tac & 0x03]
     _timer_counter is _timer_counter + cycles
 
     loop while _timer_counter >= threshold:
@@ -49,7 +49,7 @@ define timer_step(mem, cycles) as:
         tima is mem.data[TIMER_TIMA] + 1
         if tima > 0xFF:
             mem.data[TIMER_TIMA] is mem.data[TIMER_TMA]
-            mem.if_reg is bit_or of [mem.if_reg, 0x04]
+            mem.if_reg is mem.if_reg | 0x04
         else:
             mem.data[TIMER_TIMA] is tima
 
@@ -74,7 +74,7 @@ define lcd_step(mem, cycles) as:
             ly is 0
         mem.data[0xFF44] is ly
         if ly == VBLANK_START_LINE:
-            mem.if_reg is bit_or of [mem.if_reg, 0x01]
+            mem.if_reg is mem.if_reg | 0x01
 
 # ============================================================
 # Interrupt handling
@@ -89,7 +89,7 @@ INT_JOYPAD  is 0x10
 define handle_interrupts(cpu, mem) as:
     if cpu.ime == 0 and cpu.halted == 0:
         return 0
-    pending is bit_and of [mem.ie, mem.if_reg]
+    pending is mem.ie & mem.if_reg
     if pending == 0:
         return 0
 
@@ -102,28 +102,28 @@ define handle_interrupts(cpu, mem) as:
     cpu.ime is 0
 
     # Priority: VBlank > STAT > Timer > Serial > Joypad
-    if bit_and of [pending, INT_VBLANK] != 0:
-        mem.if_reg is bit_and of [mem.if_reg, bit_xor of [0xFF, INT_VBLANK]]
+    if (pending & INT_VBLANK) != 0:
+        mem.if_reg is mem.if_reg & (0xFF ^ INT_VBLANK)
         push16 of [cpu, mem, cpu.pc]
         cpu.pc is 0x0040
         return 20
-    if bit_and of [pending, INT_STAT] != 0:
-        mem.if_reg is bit_and of [mem.if_reg, bit_xor of [0xFF, INT_STAT]]
+    if (pending & INT_STAT) != 0:
+        mem.if_reg is mem.if_reg & (0xFF ^ INT_STAT)
         push16 of [cpu, mem, cpu.pc]
         cpu.pc is 0x0048
         return 20
-    if bit_and of [pending, INT_TIMER] != 0:
-        mem.if_reg is bit_and of [mem.if_reg, bit_xor of [0xFF, INT_TIMER]]
+    if (pending & INT_TIMER) != 0:
+        mem.if_reg is mem.if_reg & (0xFF ^ INT_TIMER)
         push16 of [cpu, mem, cpu.pc]
         cpu.pc is 0x0050
         return 20
-    if bit_and of [pending, INT_SERIAL] != 0:
-        mem.if_reg is bit_and of [mem.if_reg, bit_xor of [0xFF, INT_SERIAL]]
+    if (pending & INT_SERIAL) != 0:
+        mem.if_reg is mem.if_reg & (0xFF ^ INT_SERIAL)
         push16 of [cpu, mem, cpu.pc]
         cpu.pc is 0x0058
         return 20
-    if bit_and of [pending, INT_JOYPAD] != 0:
-        mem.if_reg is bit_and of [mem.if_reg, bit_xor of [0xFF, INT_JOYPAD]]
+    if (pending & INT_JOYPAD) != 0:
+        mem.if_reg is mem.if_reg & (0xFF ^ INT_JOYPAD)
         push16 of [cpu, mem, cpu.pc]
         cpu.pc is 0x0060
         return 20

@@ -25,7 +25,7 @@ define read_r8(cpu, mem, idx) as:
     return 0
 
 define write_r8(cpu, mem, idx, val) as:
-    val is bit_and of [val, 0xFF]
+    val is val & 0xFF
     match idx:
         case 0:
             cpu.b is val
@@ -50,17 +50,17 @@ define sign8(val) as:
     return val
 
 define push16(cpu, mem, val) as:
-    cpu.sp is bit_and of [cpu.sp - 1, 0xFFFF]
-    mem_write of [mem, cpu.sp, bit_and of [bit_shr of [val, 8], 0xFF]]
-    cpu.sp is bit_and of [cpu.sp - 1, 0xFFFF]
-    mem_write of [mem, cpu.sp, bit_and of [val, 0xFF]]
+    cpu.sp is (cpu.sp - 1) & 0xFFFF
+    mem_write of [mem, cpu.sp, (val >> 8) & 0xFF]
+    cpu.sp is (cpu.sp - 1) & 0xFFFF
+    mem_write of [mem, cpu.sp, val & 0xFF]
 
 define pop16(cpu, mem) as:
     lo is mem_read of [mem, cpu.sp]
-    cpu.sp is bit_and of [cpu.sp + 1, 0xFFFF]
+    cpu.sp is (cpu.sp + 1) & 0xFFFF
     hi is mem_read of [mem, cpu.sp]
-    cpu.sp is bit_and of [cpu.sp + 1, 0xFFFF]
-    return bit_or of [bit_shl of [hi, 8], lo]
+    cpu.sp is (cpu.sp + 1) & 0xFFFF
+    return (hi << 8) | lo
 
 # ============================================================
 # Build opcode dispatch tables
@@ -98,12 +98,12 @@ define _op_ld_de_a(ctx) as:
 define _op_ld_hli_a(ctx) as:
     hl is get_hl of ctx[0]
     mem_write of [ctx[1], hl, ctx[0].a]
-    set_hl of [ctx[0], bit_and of [hl + 1, 0xFFFF]]
+    set_hl of [ctx[0], (hl + 1) & 0xFFFF]
     return 8
 define _op_ld_hld_a(ctx) as:
     hl is get_hl of ctx[0]
     mem_write of [ctx[1], hl, ctx[0].a]
-    set_hl of [ctx[0], bit_and of [hl - 1, 0xFFFF]]
+    set_hl of [ctx[0], (hl - 1) & 0xFFFF]
     return 8
 
 define _op_ld_a_bc(ctx) as:
@@ -115,38 +115,38 @@ define _op_ld_a_de(ctx) as:
 define _op_ld_a_hli(ctx) as:
     hl is get_hl of ctx[0]
     ctx[0].a is mem_read of [ctx[1], hl]
-    set_hl of [ctx[0], bit_and of [hl + 1, 0xFFFF]]
+    set_hl of [ctx[0], (hl + 1) & 0xFFFF]
     return 8
 define _op_ld_a_hld(ctx) as:
     hl is get_hl of ctx[0]
     ctx[0].a is mem_read of [ctx[1], hl]
-    set_hl of [ctx[0], bit_and of [hl - 1, 0xFFFF]]
+    set_hl of [ctx[0], (hl - 1) & 0xFFFF]
     return 8
 
 define _op_inc_bc(ctx) as:
-    set_bc of [ctx[0], bit_and of [(get_bc of ctx[0]) + 1, 0xFFFF]]
+    set_bc of [ctx[0], ((get_bc of ctx[0]) + 1) & 0xFFFF]
     return 8
 define _op_inc_de(ctx) as:
-    set_de of [ctx[0], bit_and of [(get_de of ctx[0]) + 1, 0xFFFF]]
+    set_de of [ctx[0], ((get_de of ctx[0]) + 1) & 0xFFFF]
     return 8
 define _op_inc_hl(ctx) as:
-    set_hl of [ctx[0], bit_and of [(get_hl of ctx[0]) + 1, 0xFFFF]]
+    set_hl of [ctx[0], ((get_hl of ctx[0]) + 1) & 0xFFFF]
     return 8
 define _op_inc_sp(ctx) as:
-    ctx[0].sp is bit_and of [ctx[0].sp + 1, 0xFFFF]
+    ctx[0].sp is (ctx[0].sp + 1) & 0xFFFF
     return 8
 
 define _op_dec_bc(ctx) as:
-    set_bc of [ctx[0], bit_and of [(get_bc of ctx[0]) - 1, 0xFFFF]]
+    set_bc of [ctx[0], ((get_bc of ctx[0]) - 1) & 0xFFFF]
     return 8
 define _op_dec_de(ctx) as:
-    set_de of [ctx[0], bit_and of [(get_de of ctx[0]) - 1, 0xFFFF]]
+    set_de of [ctx[0], ((get_de of ctx[0]) - 1) & 0xFFFF]
     return 8
 define _op_dec_hl16(ctx) as:
-    set_hl of [ctx[0], bit_and of [(get_hl of ctx[0]) - 1, 0xFFFF]]
+    set_hl of [ctx[0], ((get_hl of ctx[0]) - 1) & 0xFFFF]
     return 8
 define _op_dec_sp(ctx) as:
-    ctx[0].sp is bit_and of [ctx[0].sp - 1, 0xFFFF]
+    ctx[0].sp is (ctx[0].sp - 1) & 0xFFFF
     return 8
 
 define _op_add_hl_bc(ctx) as:
@@ -241,53 +241,53 @@ define _op_ld_a_d8(ctx) as:
 
 define _op_rlca(ctx) as:
     ctx[0].a is alu_rlc of [ctx[0], ctx[0].a]
-    ctx[0].f is bit_and of [ctx[0].f, FLAG_C]
+    ctx[0].f is ctx[0].f & FLAG_C
     return 4
 define _op_rla(ctx) as:
     ctx[0].a is alu_rl of [ctx[0], ctx[0].a]
-    ctx[0].f is bit_and of [ctx[0].f, FLAG_C]
+    ctx[0].f is ctx[0].f & FLAG_C
     return 4
 define _op_rrca(ctx) as:
     ctx[0].a is alu_rrc of [ctx[0], ctx[0].a]
-    ctx[0].f is bit_and of [ctx[0].f, FLAG_C]
+    ctx[0].f is ctx[0].f & FLAG_C
     return 4
 define _op_rra(ctx) as:
     ctx[0].a is alu_rr of [ctx[0], ctx[0].a]
-    ctx[0].f is bit_and of [ctx[0].f, FLAG_C]
+    ctx[0].f is ctx[0].f & FLAG_C
     return 4
 
 define _op_ld_a16_sp(ctx) as:
     addr is fetch16 of [ctx[0], ctx[1]]
-    mem_write of [ctx[1], addr, bit_and of [ctx[0].sp, 0xFF]]
-    mem_write of [ctx[1], bit_and of [addr + 1, 0xFFFF], bit_shr of [ctx[0].sp, 8]]
+    mem_write of [ctx[1], addr, ctx[0].sp & 0xFF]
+    mem_write of [ctx[1], (addr + 1) & 0xFFFF, ctx[0].sp >> 8]
     return 20
 
 define _op_jr(ctx) as:
     offset is sign8 of (fetch8 of [ctx[0], ctx[1]])
-    ctx[0].pc is bit_and of [ctx[0].pc + offset, 0xFFFF]
+    ctx[0].pc is (ctx[0].pc + offset) & 0xFFFF
     return 12
 define _op_jr_nz(ctx) as:
     offset is sign8 of (fetch8 of [ctx[0], ctx[1]])
     if (flag_z of ctx[0]) == 0:
-        ctx[0].pc is bit_and of [ctx[0].pc + offset, 0xFFFF]
+        ctx[0].pc is (ctx[0].pc + offset) & 0xFFFF
         return 12
     return 8
 define _op_jr_z(ctx) as:
     offset is sign8 of (fetch8 of [ctx[0], ctx[1]])
     if (flag_z of ctx[0]) == 1:
-        ctx[0].pc is bit_and of [ctx[0].pc + offset, 0xFFFF]
+        ctx[0].pc is (ctx[0].pc + offset) & 0xFFFF
         return 12
     return 8
 define _op_jr_nc(ctx) as:
     offset is sign8 of (fetch8 of [ctx[0], ctx[1]])
     if (flag_c of ctx[0]) == 0:
-        ctx[0].pc is bit_and of [ctx[0].pc + offset, 0xFFFF]
+        ctx[0].pc is (ctx[0].pc + offset) & 0xFFFF
         return 12
     return 8
 define _op_jr_c(ctx) as:
     offset is sign8 of (fetch8 of [ctx[0], ctx[1]])
     if (flag_c of ctx[0]) == 1:
-        ctx[0].pc is bit_and of [ctx[0].pc + offset, 0xFFFF]
+        ctx[0].pc is (ctx[0].pc + offset) & 0xFFFF
         return 12
     return 8
 
@@ -295,15 +295,15 @@ define _op_daa(ctx) as:
     alu_daa of ctx[0]
     return 4
 define _op_cpl(ctx) as:
-    ctx[0].a is bit_xor of [ctx[0].a, 0xFF]
-    ctx[0].f is bit_or of [(bit_and of [ctx[0].f, bit_or of [FLAG_Z, FLAG_C]]), bit_or of [FLAG_N, FLAG_H]]
+    ctx[0].a is ctx[0].a ^ 0xFF
+    ctx[0].f is ((ctx[0].f & (FLAG_Z | FLAG_C))) | (FLAG_N | FLAG_H)
     return 4
 define _op_scf(ctx) as:
-    ctx[0].f is bit_or of [(bit_and of [ctx[0].f, FLAG_Z]), FLAG_C]
+    ctx[0].f is (ctx[0].f & FLAG_Z) | FLAG_C
     return 4
 define _op_ccf(ctx) as:
-    c is bit_xor of [(bit_and of [ctx[0].f, FLAG_C]), FLAG_C]
-    ctx[0].f is bit_or of [(bit_and of [ctx[0].f, FLAG_Z]), c]
+    c is (ctx[0].f & FLAG_C) ^ FLAG_C
+    ctx[0].f is (ctx[0].f & FLAG_Z) | c
     return 4
 
 define _op_halt(ctx) as:
@@ -318,8 +318,8 @@ define _op_stop(ctx) as:
 # LD r8, r8 — generic handler using opcode stored in ctx
 define _op_ld_r_r(ctx) as:
     op is ctx[2]
-    dst is bit_and of [bit_shr of [op - 0x40, 3], 0x07]
-    src is bit_and of [op, 0x07]
+    dst is ((op - 0x40) >> 3) & 0x07
+    src is op & 0x07
     val is read_r8 of [ctx[0], ctx[1], src]
     write_r8 of [ctx[0], ctx[1], dst, val]
     if src == 6 or dst == 6:
@@ -329,9 +329,9 @@ define _op_ld_r_r(ctx) as:
 # ALU A, r8 — generic handler
 define _op_alu_r(ctx) as:
     op is ctx[2]
-    src is bit_and of [op, 0x07]
+    src is op & 0x07
     val is read_r8 of [ctx[0], ctx[1], src]
-    alu_op is bit_and of [bit_shr of [op - 0x80, 3], 0x07]
+    alu_op is ((op - 0x80) >> 3) & 0x07
     match alu_op:
         case 0:
             alu_add of [ctx[0], val]
@@ -537,16 +537,16 @@ define _op_rst_38(ctx) as:
 
 # LDH / LD (C), A etc
 define _op_ldh_a8_a(ctx) as:
-    mem_write of [ctx[1], bit_or of [0xFF00, fetch8 of [ctx[0], ctx[1]]], ctx[0].a]
+    mem_write of [ctx[1], 0xFF00 | (fetch8 of [ctx[0], ctx[1]]), ctx[0].a]
     return 12
 define _op_ldh_a_a8(ctx) as:
-    ctx[0].a is mem_read of [ctx[1], bit_or of [0xFF00, fetch8 of [ctx[0], ctx[1]]]]
+    ctx[0].a is mem_read of [ctx[1], 0xFF00 | (fetch8 of [ctx[0], ctx[1]])]
     return 12
 define _op_ld_c_a(ctx) as:
-    mem_write of [ctx[1], bit_or of [0xFF00, ctx[0].c], ctx[0].a]
+    mem_write of [ctx[1], 0xFF00 | ctx[0].c, ctx[0].a]
     return 8
 define _op_ld_a_c(ctx) as:
-    ctx[0].a is mem_read of [ctx[1], bit_or of [0xFF00, ctx[0].c]]
+    ctx[0].a is mem_read of [ctx[1], 0xFF00 | ctx[0].c]
     return 8
 define _op_ld_a16_a(ctx) as:
     mem_write of [ctx[1], fetch16 of [ctx[0], ctx[1]], ctx[0].a]
@@ -560,11 +560,11 @@ define _op_add_sp_s8(ctx) as:
     result is ctx[0].sp + offset
     h is 0
     c is 0
-    if (bit_and of [bit_xor of [bit_xor of [ctx[0].sp, offset], result], 0x10]) != 0:
+    if (((ctx[0].sp ^ offset ^ result) & 0x10)) != 0:
         h is 1
-    if (bit_and of [bit_xor of [bit_xor of [ctx[0].sp, offset], result], 0x100]) != 0:
+    if (((ctx[0].sp ^ offset ^ result) & 0x100)) != 0:
         c is 1
-    ctx[0].sp is bit_and of [result, 0xFFFF]
+    ctx[0].sp is result & 0xFFFF
     set_flags of [ctx[0], 0, 0, h, c]
     return 16
 
@@ -573,11 +573,11 @@ define _op_ld_hl_sp_s8(ctx) as:
     result is ctx[0].sp + offset
     h is 0
     c is 0
-    if (bit_and of [bit_xor of [bit_xor of [ctx[0].sp, offset], result], 0x10]) != 0:
+    if (((ctx[0].sp ^ offset ^ result) & 0x10)) != 0:
         h is 1
-    if (bit_and of [bit_xor of [bit_xor of [ctx[0].sp, offset], result], 0x100]) != 0:
+    if (((ctx[0].sp ^ offset ^ result) & 0x100)) != 0:
         c is 1
-    set_hl of [ctx[0], bit_and of [result, 0xFFFF]]
+    set_hl of [ctx[0], result & 0xFFFF]
     set_flags of [ctx[0], 0, 0, h, c]
     return 12
 
@@ -595,9 +595,9 @@ define _op_ei(ctx) as:
 # CB prefix handler
 define _op_cb(ctx) as:
     op is fetch8 of [ctx[0], ctx[1]]
-    reg is bit_and of [op, 0x07]
-    bit is bit_and of [bit_shr of [op, 3], 0x07]
-    group is bit_shr of [op, 6]
+    reg is op & 0x07
+    bit is (op >> 3) & 0x07
+    group is op >> 6
     val is read_r8 of [ctx[0], ctx[1], reg]
     cycles is 8
     if reg == 6:

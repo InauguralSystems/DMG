@@ -60,7 +60,7 @@ define load_rom(mem, path) as:
     return 1
 
 define mem_read(mem, addr) as:
-    addr is bit_and of [addr, 0xFFFF]
+    addr is addr & 0xFFFF
 
     # ROM bank 0
     if addr < 0x4000:
@@ -89,16 +89,16 @@ define mem_read(mem, addr) as:
     return mem.data[addr]
 
 define mem_write(mem, addr, val) as:
-    addr is bit_and of [addr, 0xFFFF]
-    val is bit_and of [val, 0xFF]
+    addr is addr & 0xFFFF
+    val is val & 0xFF
 
     # ROM area — MBC register writes
     if addr < 0x8000:
         if mem.mbc_type == 1:
             if addr < 0x2000:
-                mem.ram_enable is bit_and of [val, 0x0F] == 0x0A
+                mem.ram_enable is (val & 0x0F) == 0x0A
             elif addr < 0x4000:
-                bank is bit_and of [val, 0x1F]
+                bank is val & 0x1F
                 if bank == 0:
                     bank is 1
                 mem.rom_bank is bank
@@ -109,12 +109,12 @@ define mem_write(mem, addr, val) as:
                         if src < (len of mem.rom):
                             mem.data[0x4000 + i] is mem.rom[src]
             elif addr < 0x6000:
-                mem.ram_bank is bit_and of [val, 0x03]
+                mem.ram_bank is val & 0x03
         elif mem.mbc_type == 3:
             if addr < 0x2000:
-                mem.ram_enable is bit_and of [val, 0x0F] == 0x0A
+                mem.ram_enable is (val & 0x0F) == 0x0A
             elif addr < 0x4000:
-                bank is bit_and of [val, 0x7F]
+                bank is val & 0x7F
                 if bank == 0:
                     bank is 1
                 mem.rom_bank is bank
@@ -153,7 +153,7 @@ define mem_write(mem, addr, val) as:
 
     # DMA transfer (0xFF46)
     if addr == 0xFF46:
-        src is bit_shl of [val, 8]
+        src is val << 8
         for i in range of 160:
             mem.data[0xFE00 + i] is mem_read of [mem, src + i]
         mem.data[addr] is val
