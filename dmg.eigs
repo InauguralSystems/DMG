@@ -182,7 +182,8 @@ _pending_cycles is 0
 t0 is monotonic_ms of null
 
 prev_serial_len is 0
-loop while total_cycles < max_cycles:
+unobserved:
+  loop while total_cycles < max_cycles:
     if cpu.halted == 1:
         # Advance one scanline at a time until an interrupt fires
         skip is CYCLES_PER_LINE - _scanline_counter
