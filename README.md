@@ -7,19 +7,39 @@ landed upstream because the emulator demanded it.
 
 ## Status
 
-CPU core implemented (SM83 full instruction set including CB prefix), with
-opcode dispatch via the new `dispatch` builtin (GAP-DMG-001 resolved),
-native bitwise operators (GAP-DMG-004 resolved), typed-buffer memory bank,
-and timer / LCD / VBlank timing. First Blargg `cpu_instrs` output captured
-via the serial port. Memory growth on multi-million-cycle runs is partially
-mitigated (GAP-DMG-003) — see `GAPS.md` for the remaining work.
+Full SM83 CPU core (256 + 256 CB-prefix opcodes), 64KB memory bus with
+MBC1/MBC3 bank switching, timer/LCD/VBlank timing, interrupt handling,
+joypad input, and PPU rendering (background, window, sprites with priority).
+
+Runs in two modes:
+- **Headless**: Blargg test ROMs via serial port capture
+- **Graphical**: SDL2 window with keyboard input (`--gfx`)
+
+8 language gaps found and resolved upstream (see `GAPS.md`), including
+dispatch tables, native bitwise operators, compound assignment, buffer
+iteration, sign extension, sort, and loop condition memory leak fixes.
 
 ## Architecture
 
-- `src/cpu.eigs` — Registers, flags, ALU operations, rotate/shift
-- `src/memory.eigs` — 64KB address space, MBC1/MBC3, serial capture
-- `src/opcodes.eigs` — Full SM83 instruction decoder (256 + 256 CB) via `dispatch`
-- `dmg.eigs` — Main loop with timer, interrupts, Blargg test harness
+- `src/cpu.eigs` — Registers, flags, ALU operations, rotate/shift, DAA
+- `src/memory.eigs` — 64KB address space, MBC1/MBC3, lazy bank switching, DMA
+- `src/opcodes.eigs` — Full SM83 instruction decoder via `dispatch`
+- `src/ppu.eigs` — Pixel Processing Unit: BG/window/sprite rendering
+- `src/joypad.eigs` — Button state, FF00 register, interrupt on press
+- `dmg.eigs` — Main loop, timer, interrupts, graphical + headless modes
+- `tests/test_cpu.eigs` — 14 CPU unit tests
+
+## Usage
+
+```
+# Headless (Blargg tests)
+eigenscript dmg.eigs roms/cpu_instrs.gb --cycles 50000000
+
+# Graphical
+eigenscript dmg.eigs roms/pokemon-red.gb --gfx --scale 3 --frameskip 2
+```
+
+Keys: arrows = D-pad, Z = A, X = B, Return = Start, Backspace = Select, Escape = quit.
 
 ## Goal
 
