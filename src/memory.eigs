@@ -21,18 +21,21 @@ define new_memory() as:
         "ram_bank": 0,
         "ram_enable": 0,
         "mbc_type": 0,
+        "rom_len": 0,
         "serial_output": "",
         "ie": 0,
-        "if_reg": 0
+        "if_reg": 0,
+        "joypad": null
     }
 
 define load_rom(mem, path) as:
-    bytes is read_bytes of path
+    bytes is read_bytes_buf of path
     if bytes == null:
         print of f"Failed to load ROM: {path}"
         return 0
     mem.rom is bytes
-    rom_len is len of bytes
+    rom_len is buf_len of bytes
+    mem.rom_len is rom_len
 
     # Copy first 32KB into memory (bank 0 + bank 1)
     limit is rom_len
@@ -68,15 +71,21 @@ define mem_read(mem, addr) as:
 
     # ROM bank N (switchable)
     if addr < 0x8000:
-        if mem.mbc_type > 0 and (len of mem.rom) > 0:
+        if mem.mbc_type > 0 and mem.rom_len > 0:
             rom_addr is (mem.rom_bank * 0x4000) + (addr - 0x4000)
-            if rom_addr < (len of mem.rom):
+            if rom_addr < mem.rom_len:
                 return mem.rom[rom_addr]
         return mem.data[addr]
 
     # Echo RAM
     if addr >= 0xE000 and addr < 0xFE00:
         return mem.data[addr - 0x2000]
+
+    # Joypad register
+    if addr == 0xFF00:
+        if mem.joypad != null:
+            return joypad_read of [mem.joypad, mem.data[0xFF00]]
+        return mem.data[addr]
 
     # IE register
     if addr == 0xFFFF:
@@ -92,7 +101,7 @@ define mem_write(mem, addr, val) as:
     addr is addr & 0xFFFF
     val is val & 0xFF
 
-    # ROM area — MBC register writes
+    # ROM area — MBC register writes (bank switching)
     if addr < 0x8000:
         if mem.mbc_type == 1:
             if addr < 0x2000:
@@ -102,12 +111,6 @@ define mem_write(mem, addr, val) as:
                 if bank == 0:
                     bank is 1
                 mem.rom_bank is bank
-                # Update ROM bank mapping
-                if (len of mem.rom) > mem.rom_bank * 0x4000:
-                    for i in range of 0x4000:
-                        src is mem.rom_bank * 0x4000 + i
-                        if src < (len of mem.rom):
-                            mem.data[0x4000 + i] is mem.rom[src]
             elif addr < 0x6000:
                 mem.ram_bank is val & 0x03
         elif mem.mbc_type == 3:
@@ -118,11 +121,6 @@ define mem_write(mem, addr, val) as:
                 if bank == 0:
                     bank is 1
                 mem.rom_bank is bank
-                if (len of mem.rom) > mem.rom_bank * 0x4000:
-                    for i in range of 0x4000:
-                        src is mem.rom_bank * 0x4000 + i
-                        if src < (len of mem.rom):
-                            mem.data[0x4000 + i] is mem.rom[src]
         return null
 
     # Echo RAM
@@ -133,6 +131,11 @@ define mem_write(mem, addr, val) as:
     # IE register
     if addr == 0xFFFF:
         mem.ie is val
+        return null
+
+    # Joypad register — only store select bits (high nibble)
+    if addr == 0xFF00:
+        mem.data[0xFF00] is val & 0x30
         return null
 
     # IF register

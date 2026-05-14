@@ -1,0 +1,236 @@
+# ============================================================
+# DMG PPU — Pixel Processing Unit
+# ============================================================
+# Renders background tiles, sprites, and palettes into a
+# 160x144 framebuffer. Called once per visible scanline from
+# lcd_step. Output is palette indices 0-3 in a flat buffer,
+# blitted to screen via gfx_fb.
+
+define new_ppu() as:
+    return {
+        "fb": buffer of 23040,
+        "bg_pri": buffer of 160,
+        "frame_count": 0,
+        "frame_skip": 4
+    }
+
+# Extract 4 shade values from a palette register (BGP/OBP)
+# Palette byte encodes 4 shades in 2-bit pairs: bits 1-0 = color 0, etc.
+define palette_shades(pal) as:
+    return [pal & 3, (pal >> 2) & 3, (pal >> 4) & 3, (pal >> 6) & 3]
+
+# Render one scanline into the framebuffer
+define ppu_render_scanline(ppu, mem, ly) as:
+    lcdc is mem.data[0xFF40]
+
+    # LCD off — blank scanline
+    if (lcdc & 0x80) == 0:
+        base is ly * 160
+        for px in range of 160:
+            ppu.fb[base + px] is 0
+        return null
+
+    base is ly * 160
+    bgp is palette_shades of mem.data[0xFF47]
+
+    # ---- Background layer ----
+    if (lcdc & 0x01) != 0:
+        scy is mem.data[0xFF42]
+        scx is mem.data[0xFF43]
+
+        # Tile map base: bit 3 of LCDC
+        if (lcdc & 0x08) != 0:
+            map_base is 0x9C00
+        else:
+            map_base is 0x9800
+
+        # Tile data addressing: bit 4 of LCDC
+        # bit4=1: unsigned 0x8000 base (tiles 0-255)
+        # bit4=0: signed 0x8800 base (tiles -128..127, 0x9000 is tile 0)
+        unsigned_mode is (lcdc & 0x10) != 0
+
+        bg_y is (ly + scy) & 0xFF
+        tile_row is bg_y & 7
+
+        # Cache tile data across 8-pixel tiles
+        prev_tile_x is -1
+        tile_lo is 0
+        tile_hi is 0
+
+        for px in range of 160:
+            bg_x is (px + scx) & 0xFF
+            tile_x is bg_x >> 3
+
+            # Fetch tile data only at tile boundary
+            if tile_x != prev_tile_x:
+                prev_tile_x is tile_x
+                map_addr is map_base + ((bg_y >> 3) * 32) + tile_x
+                tile_num is mem.data[map_addr]
+
+                if unsigned_mode == 1:
+                    tile_addr is 0x8000 + (tile_num * 16) + (tile_row * 2)
+                else:
+                    # Signed: tile 0 is at 0x9000
+                    if tile_num >= 128:
+                        tile_addr is 0x8800 + ((tile_num - 128) * 16) + (tile_row * 2)
+                    else:
+                        tile_addr is 0x9000 + (tile_num * 16) + (tile_row * 2)
+
+                tile_lo is mem.data[tile_addr]
+                tile_hi is mem.data[tile_addr + 1]
+
+            # Extract 2-bit color from tile planes
+            bit is 7 - (bg_x & 7)
+            color_id is ((tile_hi >> bit) & 1) << 1
+            color_id is color_id | ((tile_lo >> bit) & 1)
+
+            ppu.fb[base + px] is bgp[color_id]
+            ppu.bg_pri[px] is color_id
+    else:
+        # BG disabled — fill with color 0
+        for px in range of 160:
+            ppu.fb[base + px] is 0
+            ppu.bg_pri[px] is 0
+
+    # ---- Window layer ----
+    if (lcdc & 0x20) != 0:
+        wy is mem.data[0xFF4A]
+        wx is mem.data[0xFF4B]
+        if ly >= wy and wx <= 166:
+            if (lcdc & 0x40) != 0:
+                win_map is 0x9C00
+            else:
+                win_map is 0x9800
+            unsigned_mode is (lcdc & 0x10) != 0
+            win_y is ly - wy
+            win_row is win_y & 7
+            prev_wtx is -1
+            wtile_lo is 0
+            wtile_hi is 0
+            for px in range of 160:
+                screen_x is wx - 7 + px
+                if screen_x < 0 or screen_x >= 160:
+                    continue
+                # Actually px here is the window-internal x
+                # screen_x is where on screen. Let me fix: iterate screen pixels
+            # Re-approach: iterate screen X from max(0, wx-7) to 159
+            start_x is wx - 7
+            if start_x < 0:
+                start_x is 0
+            for sx in range of (160 - start_x):
+                screen_x is start_x + sx
+                win_x is screen_x - (wx - 7)
+                wtx is win_x >> 3
+                if wtx != prev_wtx:
+                    prev_wtx is wtx
+                    wmap_addr is win_map + ((win_y >> 3) * 32) + wtx
+                    wtn is mem.data[wmap_addr]
+                    if unsigned_mode == 1:
+                        wta is 0x8000 + (wtn * 16) + (win_row * 2)
+                    else:
+                        if wtn >= 128:
+                            wta is 0x8800 + ((wtn - 128) * 16) + (win_row * 2)
+                        else:
+                            wta is 0x9000 + (wtn * 16) + (win_row * 2)
+                    wtile_lo is mem.data[wta]
+                    wtile_hi is mem.data[wta + 1]
+                wbit is 7 - (win_x & 7)
+                wcid is ((wtile_hi >> wbit) & 1) << 1
+                wcid is wcid | ((wtile_lo >> wbit) & 1)
+                ppu.fb[base + screen_x] is bgp[wcid]
+                ppu.bg_pri[screen_x] is wcid
+
+    # ---- Sprite layer ----
+    if (lcdc & 0x02) != 0:
+        # Sprite height: 8 or 16 pixels
+        if (lcdc & 0x04) != 0:
+            sprite_h is 16
+        else:
+            sprite_h is 8
+
+        obp0 is palette_shades of mem.data[0xFF48]
+        obp1 is palette_shades of mem.data[0xFF49]
+
+        # Scan OAM for sprites on this scanline (max 10)
+        sprites is []
+        for i in range of 40:
+            oam_addr is 0xFE00 + (i * 4)
+            sy is mem.data[oam_addr] - 16
+            sx is mem.data[oam_addr + 1] - 8
+            if ly >= sy and ly < (sy + sprite_h):
+                tile is mem.data[oam_addr + 2]
+                flags is mem.data[oam_addr + 3]
+                append of [sprites, [sx, sy, tile, flags, i]]
+                if (len of sprites) >= 10:
+                    break
+
+        # Sort by X coordinate (insertion sort, stable by OAM order)
+        for i in range of (len of sprites):
+            j is i
+            loop while j > 0:
+                if sprites[j][0] < sprites[j - 1][0]:
+                    tmp is sprites[j]
+                    sprites[j] is sprites[j - 1]
+                    sprites[j - 1] is tmp
+                    j is j - 1
+                else:
+                    break
+
+        # Render sprites (lower index = higher priority for same X)
+        # Iterate in reverse so higher-priority sprites overwrite
+        si is (len of sprites) - 1
+        loop while si >= 0:
+            sx is sprites[si][0]
+            sy is sprites[si][1]
+            tile is sprites[si][2]
+            flags is sprites[si][3]
+
+            # Flags: bit 7 = BG priority, bit 6 = Y flip, bit 5 = X flip, bit 4 = palette
+            bg_over is (flags & 0x80) != 0
+            y_flip is (flags & 0x40) != 0
+            x_flip is (flags & 0x20) != 0
+            if (flags & 0x10) != 0:
+                spal is obp1
+            else:
+                spal is obp0
+
+            # Row within sprite
+            row is ly - sy
+            if y_flip == 1:
+                row is (sprite_h - 1) - row
+
+            # For 8x16 mode, mask tile number bit 0
+            if sprite_h == 16:
+                tile is tile & 0xFE
+                if row >= 8:
+                    tile is tile + 1
+                    row is row - 8
+
+            tile_addr is 0x8000 + (tile * 16) + (row * 2)
+            slo is mem.data[tile_addr]
+            shi is mem.data[tile_addr + 1]
+
+            for col in range of 8:
+                screen_x is sx + col
+                if screen_x < 0 or screen_x >= 160:
+                    continue
+
+                if x_flip == 1:
+                    bit is col
+                else:
+                    bit is 7 - col
+
+                cid is ((shi >> bit) & 1) << 1
+                cid is cid | ((slo >> bit) & 1)
+
+                # Color 0 is transparent
+                if cid == 0:
+                    continue
+
+                # BG priority: if set, sprite only shows over BG color 0
+                if bg_over == 1 and ppu.bg_pri[screen_x] != 0:
+                    continue
+
+                ppu.fb[base + screen_x] is spal[cid]
+
+            si is si - 1

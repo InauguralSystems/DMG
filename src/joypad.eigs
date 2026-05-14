@@ -1,0 +1,71 @@
+# ============================================================
+# DMG Joypad — button state and FF00 register logic
+# ============================================================
+# Key mapping: arrows = D-pad, Z = A, X = B, Return = Start, Backspace = Select
+
+define new_joypad() as:
+    return {
+        "right": 0, "left": 0, "up": 0, "down": 0,
+        "a": 0, "b": 0, "select": 0, "start": 0
+    }
+
+# Update button state from SDL event, fire joypad interrupt on press
+define joypad_update(joy, mem, ev) as:
+    pressed is 0
+    if ev.type == "keydown":
+        pressed is 1
+    elif ev.type == "keyup":
+        pressed is 0
+    else:
+        return null
+
+    key is ev.key
+    if key == "right":
+        joy.right is pressed
+    elif key == "left":
+        joy.left is pressed
+    elif key == "up":
+        joy.up is pressed
+    elif key == "down":
+        joy.down is pressed
+    elif key == "z":
+        joy.a is pressed
+    elif key == "x":
+        joy.b is pressed
+    elif key == "return":
+        joy.start is pressed
+    elif key == "backspace":
+        joy.select is pressed
+    else:
+        return null
+
+    # Fire joypad interrupt on any button press
+    if pressed == 1:
+        mem.if_reg is mem.if_reg | 0x10
+
+# Read FF00 register — select byte chooses which column to read
+# Bits 4-5 select: bit4=0 → direction, bit5=0 → action
+# Bits 0-3 return active-low button state
+define joypad_read(joy, select) as:
+    result is 0x0F
+    # Direction keys (bit 4 = 0 selects this group)
+    if (select & 0x10) == 0:
+        if joy.right == 1:
+            result is result & (0x0F ^ 0x01)
+        if joy.left == 1:
+            result is result & (0x0F ^ 0x02)
+        if joy.up == 1:
+            result is result & (0x0F ^ 0x04)
+        if joy.down == 1:
+            result is result & (0x0F ^ 0x08)
+    # Action buttons (bit 5 = 0 selects this group)
+    if (select & 0x20) == 0:
+        if joy.a == 1:
+            result is result & (0x0F ^ 0x01)
+        if joy.b == 1:
+            result is result & (0x0F ^ 0x02)
+        if joy.select == 1:
+            result is result & (0x0F ^ 0x04)
+        if joy.start == 1:
+            result is result & (0x0F ^ 0x08)
+    return (select & 0x30) | result
