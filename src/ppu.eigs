@@ -82,7 +82,7 @@ define ppu_render_scanline(ppu, mem, ly) as:
             # Extract 2-bit color from tile planes
             bit is 7 - (bg_x & 7)
             color_id is ((tile_hi >> bit) & 1) << 1
-            color_id is color_id | ((tile_lo >> bit) & 1)
+            color_id |= (tile_lo >> bit) & 1
 
             ppu.fb[base + px] is bgp[color_id]
             ppu.bg_pri[px] is color_id
@@ -107,13 +107,6 @@ define ppu_render_scanline(ppu, mem, ly) as:
             prev_wtx is -1
             wtile_lo is 0
             wtile_hi is 0
-            for px in range of 160:
-                screen_x is wx - 7 + px
-                if screen_x < 0 or screen_x >= 160:
-                    continue
-                # Actually px here is the window-internal x
-                # screen_x is where on screen. Let me fix: iterate screen pixels
-            # Re-approach: iterate screen X from max(0, wx-7) to 159
             start_x is wx - 7
             if start_x < 0:
                 start_x is 0
@@ -136,7 +129,7 @@ define ppu_render_scanline(ppu, mem, ly) as:
                     wtile_hi is mem.data[wta + 1]
                 wbit is 7 - (win_x & 7)
                 wcid is ((wtile_hi >> wbit) & 1) << 1
-                wcid is wcid | ((wtile_lo >> wbit) & 1)
+                wcid |= (wtile_lo >> wbit) & 1
                 ppu.fb[base + screen_x] is bgp[wcid]
                 ppu.bg_pri[screen_x] is wcid
 
@@ -164,17 +157,8 @@ define ppu_render_scanline(ppu, mem, ly) as:
                 if (len of sprites) >= 10:
                     break
 
-        # Sort by X coordinate (insertion sort, stable by OAM order)
-        for i in range of (len of sprites):
-            j is i
-            loop while j > 0:
-                if sprites[j][0] < sprites[j - 1][0]:
-                    tmp is sprites[j]
-                    sprites[j] is sprites[j - 1]
-                    sprites[j - 1] is tmp
-                    j is j - 1
-                else:
-                    break
+        # Sort by X coordinate (stable by OAM order for equal X)
+        sort of sprites
 
         # Render sprites (lower index = higher priority for same X)
         # Iterate in reverse so higher-priority sprites overwrite
@@ -201,10 +185,10 @@ define ppu_render_scanline(ppu, mem, ly) as:
 
             # For 8x16 mode, mask tile number bit 0
             if sprite_h == 16:
-                tile is tile & 0xFE
+                tile &= 0xFE
                 if row >= 8:
-                    tile is tile + 1
-                    row is row - 8
+                    tile += 1
+                    row -= 8
 
             tile_addr is 0x8000 + (tile * 16) + (row * 2)
             slo is mem.data[tile_addr]
@@ -221,7 +205,7 @@ define ppu_render_scanline(ppu, mem, ly) as:
                     bit is 7 - col
 
                 cid is ((shi >> bit) & 1) << 1
-                cid is cid | ((slo >> bit) & 1)
+                cid |= (slo >> bit) & 1
 
                 # Color 0 is transparent
                 if cid == 0:
@@ -233,4 +217,4 @@ define ppu_render_scanline(ppu, mem, ly) as:
 
                 ppu.fb[base + screen_x] is spal[cid]
 
-            si is si - 1
+            si -= 1

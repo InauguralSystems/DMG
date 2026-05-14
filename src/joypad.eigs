@@ -41,7 +41,7 @@ define joypad_update(joy, mem, ev) as:
 
     # Fire joypad interrupt on any button press
     if pressed == 1:
-        mem.if_reg is mem.if_reg | 0x10
+        mem.if_reg |= 0x10
 
 # Read FF00 register — select byte chooses which column to read
 # Bits 4-5 select: bit4=0 → direction, bit5=0 → action
@@ -51,21 +51,21 @@ define joypad_read(joy, select) as:
     # Direction keys (bit 4 = 0 selects this group)
     if (select & 0x10) == 0:
         if joy.right == 1:
-            result is result & (0x0F ^ 0x01)
+            result &= 0x0F ^ 0x01
         if joy.left == 1:
-            result is result & (0x0F ^ 0x02)
+            result &= 0x0F ^ 0x02
         if joy.up == 1:
-            result is result & (0x0F ^ 0x04)
+            result &= 0x0F ^ 0x04
         if joy.down == 1:
-            result is result & (0x0F ^ 0x08)
+            result &= 0x0F ^ 0x08
     # Action buttons (bit 5 = 0 selects this group)
     if (select & 0x20) == 0:
         if joy.a == 1:
-            result is result & (0x0F ^ 0x01)
+            result &= 0x0F ^ 0x01
         if joy.b == 1:
-            result is result & (0x0F ^ 0x02)
+            result &= 0x0F ^ 0x02
         if joy.select == 1:
-            result is result & (0x0F ^ 0x04)
+            result &= 0x0F ^ 0x04
         if joy.start == 1:
-            result is result & (0x0F ^ 0x08)
+            result &= 0x0F ^ 0x08
     return (select & 0x30) | result

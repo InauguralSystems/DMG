@@ -95,13 +95,13 @@ define flag_c(cpu) as:
 define set_flags(cpu, z, n, h, c) as:
     f is 0
     if z == 1:
-        f is f | FLAG_Z
+        f |= FLAG_Z
     if n == 1:
-        f is f | FLAG_N
+        f |= FLAG_N
     if h == 1:
-        f is f | FLAG_H
+        f |= FLAG_H
     if c == 1:
-        f is f | FLAG_C
+        f |= FLAG_C
     cpu.f is f
 
 # ---- Fetch helpers ----
@@ -116,7 +116,7 @@ define fetch16(cpu, mem) as:
     cpu.pc is (cpu.pc + 1) & 0xFFFF
     hi is mem_read of [mem, cpu.pc]
     cpu.pc is (cpu.pc + 1) & 0xFFFF
-    return (hi << 8) | lo
+    return hi << 8 | lo
 
 # ---- ALU operations ----
 
@@ -226,11 +226,11 @@ define alu_inc(cpu, val) as:
     if (val & 0x0F) == 0x0F:
         h is 1
     # C flag preserved
-    cpu.f is (cpu.f & FLAG_C) | 0
+    cpu.f is cpu.f & FLAG_C
     if z == 1:
-        cpu.f is cpu.f | FLAG_Z
+        cpu.f |= FLAG_Z
     if h == 1:
-        cpu.f is cpu.f | FLAG_H
+        cpu.f |= FLAG_H
     return result
 
 define alu_dec(cpu, val) as:
@@ -243,9 +243,9 @@ define alu_dec(cpu, val) as:
         h is 1
     cpu.f is (cpu.f & FLAG_C) | FLAG_N
     if z == 1:
-        cpu.f is cpu.f | FLAG_Z
+        cpu.f |= FLAG_Z
     if h == 1:
-        cpu.f is cpu.f | FLAG_H
+        cpu.f |= FLAG_H
     return result
 
 # ---- 16-bit ADD HL ----
@@ -349,7 +349,7 @@ define alu_bit(cpu, bit, val) as:
     # N=0, H=1, C preserved
     cpu.f is (cpu.f & FLAG_C) | FLAG_H
     if z == 1:
-        cpu.f is cpu.f | FLAG_Z
+        cpu.f |= FLAG_Z
 
 define alu_set(bit, val) as:
     return val | (1 << bit)
@@ -368,15 +368,15 @@ define alu_daa(cpu) as:
 
     if n == 0:
         if c == 1 or a > 0x99:
-            a is a + 0x60
+            a += 0x60
             new_c is 1
         if h == 1 or (a & 0x0F) > 0x09:
-            a is a + 0x06
+            a += 0x06
     else:
         if c == 1:
-            a is a - 0x60
+            a -= 0x60
         if h == 1:
-            a is a - 0x06
+            a -= 0x06
 
     cpu.a is a & 0xFF
     z is 0

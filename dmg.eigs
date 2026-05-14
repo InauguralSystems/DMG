@@ -29,7 +29,7 @@ _timer_counter is 0
 _tac_thresholds is [1024, 16, 64, 256]
 
 define timer_step(mem, cycles) as:
-    _div_counter is _div_counter + cycles
+    _div_counter += cycles
     if _div_counter >= 256:
         mem.data[TIMER_DIV] is (mem.data[TIMER_DIV] + floor of (_div_counter / 256)) & 0xFF
         _div_counter is _div_counter % 256
@@ -39,14 +39,14 @@ define timer_step(mem, cycles) as:
         return null
 
     threshold is _tac_thresholds[tac & 0x03]
-    _timer_counter is _timer_counter + cycles
+    _timer_counter += cycles
 
     loop while _timer_counter >= threshold:
-        _timer_counter is _timer_counter - threshold
+        _timer_counter -= threshold
         tima is mem.data[TIMER_TIMA] + 1
         if tima > 0xFF:
             mem.data[TIMER_TIMA] is mem.data[TIMER_TMA]
-            mem.if_reg is mem.if_reg | 0x04
+            mem.if_reg |= 0x04
         else:
             mem.data[TIMER_TIMA] is tima
 
@@ -65,15 +65,15 @@ _scanline_counter is 0
 _gfx_ppu is null
 
 define lcd_step(mem, cycles) as:
-    _scanline_counter is _scanline_counter + cycles
+    _scanline_counter += cycles
     if _scanline_counter >= CYCLES_PER_LINE:
-        _scanline_counter is _scanline_counter - CYCLES_PER_LINE
+        _scanline_counter -= CYCLES_PER_LINE
         ly is mem.data[0xFF44] + 1
         if ly >= LINES_PER_FRAME:
             ly is 0
         mem.data[0xFF44] is ly
         if ly == VBLANK_START_LINE:
-            mem.if_reg is mem.if_reg | 0x01
+            mem.if_reg |= 0x01
 
 # ============================================================
 # Interrupt handling
@@ -100,27 +100,27 @@ define handle_interrupts(cpu, mem) as:
     cpu.ime is 0
 
     if (pending & INT_VBLANK) != 0:
-        mem.if_reg is mem.if_reg & (0xFF ^ INT_VBLANK)
+        mem.if_reg &= 0xFF ^ INT_VBLANK
         push16 of [cpu, mem, cpu.pc]
         cpu.pc is 0x0040
         return 20
     if (pending & INT_STAT) != 0:
-        mem.if_reg is mem.if_reg & (0xFF ^ INT_STAT)
+        mem.if_reg &= 0xFF ^ INT_STAT
         push16 of [cpu, mem, cpu.pc]
         cpu.pc is 0x0048
         return 20
     if (pending & INT_TIMER) != 0:
-        mem.if_reg is mem.if_reg & (0xFF ^ INT_TIMER)
+        mem.if_reg &= 0xFF ^ INT_TIMER
         push16 of [cpu, mem, cpu.pc]
         cpu.pc is 0x0050
         return 20
     if (pending & INT_SERIAL) != 0:
-        mem.if_reg is mem.if_reg & (0xFF ^ INT_SERIAL)
+        mem.if_reg &= 0xFF ^ INT_SERIAL
         push16 of [cpu, mem, cpu.pc]
         cpu.pc is 0x0058
         return 20
     if (pending & INT_JOYPAD) != 0:
-        mem.if_reg is mem.if_reg & (0xFF ^ INT_JOYPAD)
+        mem.if_reg &= 0xFF ^ INT_JOYPAD
         push16 of [cpu, mem, cpu.pc]
         cpu.pc is 0x0060
         return 20
@@ -144,17 +144,17 @@ gfx_scale is 3
 i is 1
 loop while i < (len of argv):
     if argv[i] == "--cycles" and i + 1 < (len of argv):
-        i is i + 1
+        i += 1
         max_cycles is floor of (num of argv[i])
     elif argv[i] == "--gfx":
         gfx_mode is 1
     elif argv[i] == "--frameskip" and i + 1 < (len of argv):
-        i is i + 1
+        i += 1
         frameskip is floor of (num of argv[i])
     elif argv[i] == "--scale" and i + 1 < (len of argv):
-        i is i + 1
+        i += 1
         gfx_scale is floor of (num of argv[i])
-    i is i + 1
+    i += 1
 
 # ============================================================
 # Initialization
@@ -223,32 +223,32 @@ if gfx_mode == 1:
                     skip is 4
                 timer_step of [mem, skip]
                 lcd_step of [mem, skip]
-                frame_cycles is frame_cycles + skip
+                frame_cycles += skip
                 int_cycles is handle_interrupts of [cpu, mem]
-                frame_cycles is frame_cycles + int_cycles
+                frame_cycles += int_cycles
                 continue
 
             if cpu.stopped == 1:
                 break
 
             cycles is exec_op of [cpu, mem]
-            frame_cycles is frame_cycles + cycles
+            frame_cycles += cycles
 
-            _pending_cycles is _pending_cycles + cycles
+            _pending_cycles += cycles
             if _pending_cycles >= 64:
                 timer_step of [mem, _pending_cycles]
                 lcd_step of [mem, _pending_cycles]
                 int_cycles is handle_interrupts of [cpu, mem]
-                frame_cycles is frame_cycles + int_cycles
+                frame_cycles += int_cycles
                 _pending_cycles is 0
 
-        total_cycles is total_cycles + frame_cycles
+        total_cycles += frame_cycles
 
         if cpu.stopped == 1:
             running is 0
 
         # Render frame (with frame skip)
-        ppu.frame_count is ppu.frame_count + 1
+        ppu.frame_count += 1
         if (ppu.frame_count % ppu.frame_skip) == 0:
             ppu_render_frame of [mem.data, ppu.fb]
             gfx_clear of [0, 0, 0]
@@ -304,23 +304,23 @@ if gfx_mode == 0:
                 skip is 4
             timer_step of [mem, skip]
             lcd_step of [mem, skip]
-            total_cycles is total_cycles + skip
+            total_cycles += skip
             int_cycles is handle_interrupts of [cpu, mem]
-            total_cycles is total_cycles + int_cycles
+            total_cycles += int_cycles
             continue
 
         if cpu.stopped == 1:
             break
 
         cycles is exec_op of [cpu, mem]
-        total_cycles is total_cycles + cycles
+        total_cycles += cycles
 
-        _pending_cycles is _pending_cycles + cycles
+        _pending_cycles += cycles
         if _pending_cycles >= 64:
             timer_step of [mem, _pending_cycles]
             lcd_step of [mem, _pending_cycles]
             int_cycles is handle_interrupts of [cpu, mem]
-            total_cycles is total_cycles + int_cycles
+            total_cycles += int_cycles
             _pending_cycles is 0
 
         # Check for Blargg test output every 1M cycles
