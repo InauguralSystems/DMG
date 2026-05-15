@@ -98,7 +98,7 @@ define mem_read(mem, addr) as:
 
     # IF register
     if addr == 0xFF0F:
-        return mem.if_reg
+        return mem.if_reg | 0xE0
 
     # NR52 sound status
     if addr == 0xFF26:
@@ -154,7 +154,7 @@ define mem_write(mem, addr, val) as:
 
     # IF register
     if addr == 0xFF0F:
-        mem.if_reg is val
+        mem.if_reg is val & 0x1F
         return null
 
     # Serial port (0xFF01/0xFF02) — capture output for Blargg test ROMs
