@@ -4,9 +4,28 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 ROM_PATH="${POKEMON_RED_ROM:-$ROOT_DIR/roms/pokemon-red.gb}"
-CHECKPOINTS="${POKEMON_RED_CHECKPOINTS:-${POKEMON_RED_CYCLES:-1000000 3000000 5000000 10000000}}"
+CHECKPOINTS="${POKEMON_RED_CHECKPOINTS:-${POKEMON_RED_CYCLES:-1000000 3000000 5000000 10000000 25000000}}"
 TIMEOUT_SECONDS="${POKEMON_RED_TIMEOUT_SECONDS:-240}"
 MAX_RSS_KB="${POKEMON_RED_MAX_RSS_KB:-65536}"
+DEFAULT_INPUT_SCRIPT="9000000:start:5000000,16000000:a:3000000,20500000:a:3000000"
+
+DEFAULT_INPUT_MODE=0
+if [[ -n "${POKEMON_RED_INPUT_SCRIPT+x}" ]]; then
+    INPUT_SCRIPT="$POKEMON_RED_INPUT_SCRIPT"
+elif [[ -n "${POKEMON_RED_CYCLES:-}" ]]; then
+    INPUT_SCRIPT=""
+else
+    INPUT_SCRIPT="$DEFAULT_INPUT_SCRIPT"
+    DEFAULT_INPUT_MODE=1
+fi
+
+if [[ -n "${POKEMON_RED_MIN_INPUT_EVENTS+x}" ]]; then
+    MIN_INPUT_EVENTS="$POKEMON_RED_MIN_INPUT_EVENTS"
+elif [[ "$DEFAULT_INPUT_MODE" -eq 1 ]]; then
+    MIN_INPUT_EVENTS=6
+else
+    MIN_INPUT_EVENTS=0
+fi
 
 if [[ ! -f "$ROM_PATH" ]]; then
     echo "SKIP: Pokemon Red ROM not found."
@@ -52,8 +71,13 @@ MAX_SEEN_RSS_KB=0
 FIRST_RSS_KB=0
 LAST_RSS_KB=0
 LAST_REPORTED_CYCLES=0
+LAST_INPUT_APPLIED=0
+LAST_INPUT_TOTAL=0
 
 echo "Pokemon Red smoke checkpoints: ${CHECKPOINT_ARRAY[*]}"
+if [[ -n "$INPUT_SCRIPT" ]]; then
+    echo "Pokemon Red input script: $INPUT_SCRIPT"
+fi
 
 for CHECKPOINT in "${CHECKPOINT_ARRAY[@]}"; do
     if ! [[ "$CHECKPOINT" =~ ^[0-9]+$ ]]; then
@@ -68,10 +92,17 @@ for CHECKPOINT in "${CHECKPOINT_ARRAY[@]}"; do
     fi
 
     LOG_FILE="$TMP_DIR/pokemon-red-${CHECKPOINT}.log"
+    CMD=(
+        timeout "${TIMEOUT_SECONDS}s"
+        /usr/bin/time -v
+        "$EIGENSCRIPT_BIN" "$ROOT_DIR/dmg.eigs" "$ROM_PATH" --cycles "$CHECKPOINT"
+    )
+    if [[ -n "$INPUT_SCRIPT" ]]; then
+        CMD+=(--input-script "$INPUT_SCRIPT")
+    fi
+
     set +e
-    timeout "${TIMEOUT_SECONDS}s" /usr/bin/time -v \
-        "$EIGENSCRIPT_BIN" "$ROOT_DIR/dmg.eigs" "$ROM_PATH" --cycles "$CHECKPOINT" \
-        >"$LOG_FILE" 2>&1
+    "${CMD[@]}" >"$LOG_FILE" 2>&1
     STATUS=$?
     set -e
 
@@ -96,6 +127,8 @@ for CHECKPOINT in "${CHECKPOINT_ARRAY[@]}"; do
     IF="$(sed -n 's/.* IF=\([0-9][0-9]*\).*/\1/p' "$LOG_FILE" | tail -n 1)"
     IME="$(sed -n 's/.* IME=\([0-9][0-9]*\).*/\1/p' "$LOG_FILE" | tail -n 1)"
     LY="$(sed -n 's/.* LY=\([0-9][0-9]*\).*/\1/p' "$LOG_FILE" | tail -n 1)"
+    INPUT_APPLIED="$(sed -n 's/Input events applied: \([0-9][0-9]*\)\/[0-9][0-9]*/\1/p' "$LOG_FILE" | tail -n 1)"
+    INPUT_TOTAL="$(sed -n 's/Input events applied: [0-9][0-9]*\/\([0-9][0-9]*\)/\1/p' "$LOG_FILE" | tail -n 1)"
 
     if [[ -z "$PC" || -z "$HALTED" || -z "$STOPPED" || -z "$IE" || -z "$IF" || -z "$IME" || -z "$LY" ]]; then
         echo "FAIL: checkpoint ${CHECKPOINT} did not emit a complete CPU snapshot."
@@ -126,6 +159,16 @@ for CHECKPOINT in "${CHECKPOINT_ARRAY[@]}"; do
         exit 1
     fi
 
+    if [[ -n "$INPUT_SCRIPT" ]]; then
+        if [[ -z "$INPUT_APPLIED" || -z "$INPUT_TOTAL" ]]; then
+            echo "FAIL: checkpoint ${CHECKPOINT} did not report input event application."
+            tail -n 100 "$LOG_FILE"
+            exit 1
+        fi
+        LAST_INPUT_APPLIED="$INPUT_APPLIED"
+        LAST_INPUT_TOTAL="$INPUT_TOTAL"
+    fi
+
     STATE="${PC}:${LY}:${IE}:${IF}:${IME}:${HALTED}:${STOPPED}"
     if [[ "$UNIQUE_STATES" != *"|$STATE|"* ]]; then
         UNIQUE_STATES="${UNIQUE_STATES}|${STATE}|"
@@ -141,8 +184,13 @@ for CHECKPOINT in "${CHECKPOINT_ARRAY[@]}"; do
     LAST_RSS_KB="$RSS_KB"
     LAST_REPORTED_CYCLES="$REPORTED_CYCLES"
 
-    printf 'ok: checkpoint=%s cycles=%s pc=%s ly=%s ie=%s if=%s ime=%s halted=%s rss_kb=%s\n' \
-        "$CHECKPOINT" "$REPORTED_CYCLES" "$PC" "$LY" "$IE" "$IF" "$IME" "$HALTED" "$RSS_KB"
+    if [[ -n "$INPUT_SCRIPT" ]]; then
+        printf 'ok: checkpoint=%s cycles=%s pc=%s ly=%s ie=%s if=%s ime=%s halted=%s input=%s/%s rss_kb=%s\n' \
+            "$CHECKPOINT" "$REPORTED_CYCLES" "$PC" "$LY" "$IE" "$IF" "$IME" "$HALTED" "$INPUT_APPLIED" "$INPUT_TOTAL" "$RSS_KB"
+    else
+        printf 'ok: checkpoint=%s cycles=%s pc=%s ly=%s ie=%s if=%s ime=%s halted=%s rss_kb=%s\n' \
+            "$CHECKPOINT" "$REPORTED_CYCLES" "$PC" "$LY" "$IE" "$IF" "$IME" "$HALTED" "$RSS_KB"
+    fi
 
     PREV_CHECKPOINT="$CHECKPOINT"
 done
@@ -153,9 +201,19 @@ if [[ "${#CHECKPOINT_ARRAY[@]}" -gt 1 && "$SNAPSHOT_COUNT" -lt 2 ]]; then
     exit 1
 fi
 
+if [[ "$MIN_INPUT_EVENTS" -gt 0 && "$LAST_INPUT_APPLIED" -lt "$MIN_INPUT_EVENTS" ]]; then
+    echo "FAIL: Pokemon Red input script did not apply enough events."
+    echo "Applied input events: $LAST_INPUT_APPLIED"
+    echo "Required minimum:     $MIN_INPUT_EVENTS"
+    exit 1
+fi
+
 echo "PASS: Pokemon Red smoke test"
 echo "ROM:          $ROM_PATH"
 echo "Checkpoints:  ${CHECKPOINT_ARRAY[*]}"
+if [[ -n "$INPUT_SCRIPT" ]]; then
+    echo "Input events: $LAST_INPUT_APPLIED/$LAST_INPUT_TOTAL"
+fi
 echo "Final cycles: $LAST_REPORTED_CYCLES"
 echo "First RSS:    ${FIRST_RSS_KB} KB"
 echo "Last RSS:     ${LAST_RSS_KB} KB"

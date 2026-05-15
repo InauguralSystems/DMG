@@ -9,6 +9,30 @@ define new_joypad() as:
         "a": 0, "b": 0, "select": 0, "start": 0
     }
 
+define joypad_set_button(joy, mem, button, pressed) as:
+    if button == "right":
+        joy.right is pressed
+    elif button == "left":
+        joy.left is pressed
+    elif button == "up":
+        joy.up is pressed
+    elif button == "down":
+        joy.down is pressed
+    elif button == "a" or button == "z":
+        joy.a is pressed
+    elif button == "b" or button == "x":
+        joy.b is pressed
+    elif button == "select" or button == "backspace":
+        joy.select is pressed
+    elif button == "start" or button == "return":
+        joy.start is pressed
+    else:
+        return 0
+
+    if pressed == 1:
+        mem.if_reg |= 0x10
+    return 1
+
 # Update button state from SDL event, fire joypad interrupt on press
 define joypad_update(joy, mem, ev) as:
     pressed is 0
@@ -19,29 +43,7 @@ define joypad_update(joy, mem, ev) as:
     else:
         return null
 
-    key is ev.key
-    if key == "right":
-        joy.right is pressed
-    elif key == "left":
-        joy.left is pressed
-    elif key == "up":
-        joy.up is pressed
-    elif key == "down":
-        joy.down is pressed
-    elif key == "z":
-        joy.a is pressed
-    elif key == "x":
-        joy.b is pressed
-    elif key == "return":
-        joy.start is pressed
-    elif key == "backspace":
-        joy.select is pressed
-    else:
-        return null
-
-    # Fire joypad interrupt on any button press
-    if pressed == 1:
-        mem.if_reg |= 0x10
+    joypad_set_button of [joy, mem, ev.key, pressed]
 
 # Read FF00 register — select byte chooses which column to read
 # Bits 4-5 select: bit4=0 → direction, bit5=0 → action

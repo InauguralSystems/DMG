@@ -5,6 +5,7 @@
 # Graphical mode (--gfx): renders to SDL2 window with joypad input
 #
 # Usage: eigenscript dmg.eigs <rom_path> [--cycles N] [--gfx] [--frameskip N] [--scale N]
+#        [--input-script cycle:button:duration,...]
 
 load_file of "src/cpu.eigs"
 load_file of "src/memory.eigs"
@@ -186,6 +187,7 @@ max_cycles is 50000000
 gfx_mode is 0
 frameskip is 2
 gfx_scale is 3
+input_script is ""
 
 i is 1
 loop while i < (len of argv):
@@ -200,7 +202,44 @@ loop while i < (len of argv):
     elif argv[i] == "--scale" and i + 1 < (len of argv):
         i += 1
         gfx_scale is floor of (num of argv[i])
+    elif argv[i] == "--input-script" and i + 1 < (len of argv):
+        i += 1
+        input_script is argv[i]
     i += 1
+
+define parse_input_script(script) as:
+    events is []
+    if (len of script) == 0:
+        return events
+    entries is split of [script, ","]
+    for entry in entries:
+        if (len of entry) == 0:
+            continue
+        parts is split of [entry, ":"]
+        if (len of parts) < 2:
+            continue
+        start_cycle is floor of (num of parts[0])
+        button is parts[1]
+        duration is CYCLES_PER_FRAME
+        if (len of parts) >= 3:
+            duration is floor of (num of parts[2])
+        if duration < 4:
+            duration is 4
+        append of [events, [start_cycle, button, 1]]
+        append of [events, [start_cycle + duration, button, 0]]
+    sort of events
+    return events
+
+define apply_input_events(joy, mem, events, event_index, now_cycles) as:
+    applied is 0
+    loop while event_index < (len of events):
+        ev is events[event_index]
+        if ev[0] > now_cycles:
+            break
+        if joypad_set_button of [joy, mem, ev[1], ev[2]] == 1:
+            applied += 1
+        event_index += 1
+    return [event_index, applied]
 
 # ============================================================
 # Initialization
@@ -361,8 +400,18 @@ if gfx_mode == 1:
 if gfx_mode == 0:
     prev_serial_len is 0
     printed_ram_output is 0
+    input_events is parse_input_script of input_script
+    input_event_index is 0
+    input_events_applied is 0
+    if (len of input_events) > 0:
+        headless_joy is new_joypad of null
+        mem.joypad is headless_joy
     unobserved:
       loop while total_cycles < max_cycles:
+        if (len of input_events) > 0:
+            input_result is apply_input_events of [mem.joypad, mem, input_events, input_event_index, total_cycles]
+            input_event_index is input_result[0]
+            input_events_applied += input_result[1]
         if cpu.halted == 1:
             skip is CYCLES_PER_LINE - _scanline_counter
             if skip < 4:
@@ -435,3 +484,5 @@ if gfx_mode == 0:
         print of f"Serial output: {mem.serial_output}"
     if (printed_ram_output == 0) and (blargg_ram_output_ready of mem):
         print_blargg_ram_output of mem
+    if (len of input_events) > 0:
+        print of f"Input events applied: {input_events_applied}/{len of input_events}"
