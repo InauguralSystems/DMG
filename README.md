@@ -35,6 +35,11 @@ iteration, sign extension, sort, and loop condition memory leak fixes.
 # Headless (Blargg tests)
 eigenscript dmg.eigs roms/cpu_instrs.gb --cycles 50000000
 
+# Optional Pokemon Red smoke test (ROM is local-only, not committed)
+POKEMON_RED_ROM=/path/to/pokemon-red.gb tests/run_pokemon_red_smoke.sh
+# Tunables: POKEMON_RED_CHECKPOINTS, POKEMON_RED_TIMEOUT_SECONDS, POKEMON_RED_MAX_RSS_KB
+# Back-compat single budget: POKEMON_RED_CYCLES=5000000 tests/run_pokemon_red_smoke.sh
+
 # Graphical
 eigenscript dmg.eigs roms/pokemon-red.gb --gfx --scale 3 --frameskip 2
 ```
