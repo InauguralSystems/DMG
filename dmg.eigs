@@ -5,7 +5,7 @@
 # Graphical mode (--gfx): renders to SDL2 window with joypad input
 #
 # Usage: eigenscript dmg.eigs <rom_path> [--cycles N] [--gfx] [--frameskip N] [--scale N]
-#        [--input-script cycle:button:duration,...]
+#        [--input-script cycle:button:duration,...] [--render-probe]
 
 load_file of "src/cpu.eigs"
 load_file of "src/memory.eigs"
@@ -179,7 +179,7 @@ define print_blargg_ram_output(mem) as:
 
 argv is args of null
 if (len of argv) < 1:
-    print of "Usage: eigenscript dmg.eigs <rom_path> [--cycles N] [--gfx] [--frameskip N] [--scale N]"
+    print of "Usage: eigenscript dmg.eigs <rom_path> [--cycles N] [--gfx] [--frameskip N] [--scale N] [--input-script cycle:button:duration,...] [--render-probe]"
     assert of [0, "no ROM path provided"]
 
 rom_path is argv[0]
@@ -188,6 +188,7 @@ gfx_mode is 0
 frameskip is 2
 gfx_scale is 3
 input_script is ""
+render_probe is 0
 
 i is 1
 loop while i < (len of argv):
@@ -205,6 +206,8 @@ loop while i < (len of argv):
     elif argv[i] == "--input-script" and i + 1 < (len of argv):
         i += 1
         input_script is argv[i]
+    elif argv[i] == "--render-probe":
+        render_probe is 1
     i += 1
 
 define parse_input_script(script) as:
@@ -240,6 +243,41 @@ define apply_input_events(joy, mem, events, event_index, now_cycles) as:
             applied += 1
         event_index += 1
     return [event_index, applied]
+
+define render_probe_stats(mem) as:
+    probe_ppu is new_ppu of null
+    for ly in range of 144:
+        ppu_render_scanline of [probe_ppu, mem, ly]
+
+    c0 is 0
+    c1 is 0
+    c2 is 0
+    c3 is 0
+    hash is 5381
+
+    for i in range of 23040:
+        px is probe_ppu.fb[i] & 3
+        if px == 0:
+            c0 += 1
+        elif px == 1:
+            c1 += 1
+        elif px == 2:
+            c2 += 1
+        else:
+            c3 += 1
+        hash is ((hash * 131) + px + i) % 2147483647
+
+    unique is 0
+    if c0 > 0:
+        unique += 1
+    if c1 > 0:
+        unique += 1
+    if c2 > 0:
+        unique += 1
+    if c3 > 0:
+        unique += 1
+
+    return [c1 + c2 + c3, unique, hash, c0, c1, c2, c3]
 
 # ============================================================
 # Initialization
@@ -486,3 +524,6 @@ if gfx_mode == 0:
         print_blargg_ram_output of mem
     if (len of input_events) > 0:
         print of f"Input events applied: {input_events_applied}/{len of input_events}"
+    if render_probe == 1:
+        render_stats is render_probe_stats of mem
+        print of f"Render probe: nonzero={render_stats[0]} unique={render_stats[1]} hash={render_stats[2]} c0={render_stats[3]} c1={render_stats[4]} c2={render_stats[5]} c3={render_stats[6]}"
