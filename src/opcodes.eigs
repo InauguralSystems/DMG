@@ -19,7 +19,7 @@ define read_r8(cpu, mem, idx) as:
         case 5:
             return cpu.l
         case 6:
-            return mem_read of [mem, get_hl of cpu]
+            return cpu_mem_read of [cpu, mem, get_hl of cpu]
         case 7:
             return cpu.a
     return 0
@@ -40,20 +40,20 @@ define write_r8(cpu, mem, idx, val) as:
         case 5:
             cpu.l is val
         case 6:
-            mem_write of [mem, get_hl of cpu, val]
+            cpu_mem_write of [cpu, mem, get_hl of cpu, val]
         case 7:
             cpu.a is val
 
 define push16(cpu, mem, val) as:
     cpu.sp is (cpu.sp - 1) & 0xFFFF
-    mem_write of [mem, cpu.sp, (val >> 8) & 0xFF]
+    cpu_mem_write of [cpu, mem, cpu.sp, (val >> 8) & 0xFF]
     cpu.sp is (cpu.sp - 1) & 0xFFFF
-    mem_write of [mem, cpu.sp, val & 0xFF]
+    cpu_mem_write of [cpu, mem, cpu.sp, val & 0xFF]
 
 define pop16(cpu, mem) as:
-    lo is mem_read of [mem, cpu.sp]
+    lo is cpu_mem_read of [cpu, mem, cpu.sp]
     cpu.sp is (cpu.sp + 1) & 0xFFFF
-    hi is mem_read of [mem, cpu.sp]
+    hi is cpu_mem_read of [cpu, mem, cpu.sp]
     cpu.sp is (cpu.sp + 1) & 0xFFFF
     return hi << 8 | lo
 
@@ -85,36 +85,36 @@ define _op_ld_sp_d16(ctx) as:
     return 12
 
 define _op_ld_bc_a(ctx) as:
-    mem_write of [ctx[1], get_bc of ctx[0], ctx[0].a]
+    cpu_mem_write of [ctx[0], ctx[1], get_bc of ctx[0], ctx[0].a]
     return 8
 define _op_ld_de_a(ctx) as:
-    mem_write of [ctx[1], get_de of ctx[0], ctx[0].a]
+    cpu_mem_write of [ctx[0], ctx[1], get_de of ctx[0], ctx[0].a]
     return 8
 define _op_ld_hli_a(ctx) as:
     hl is get_hl of ctx[0]
-    mem_write of [ctx[1], hl, ctx[0].a]
+    cpu_mem_write of [ctx[0], ctx[1], hl, ctx[0].a]
     set_hl of [ctx[0], (hl + 1) & 0xFFFF]
     return 8
 define _op_ld_hld_a(ctx) as:
     hl is get_hl of ctx[0]
-    mem_write of [ctx[1], hl, ctx[0].a]
+    cpu_mem_write of [ctx[0], ctx[1], hl, ctx[0].a]
     set_hl of [ctx[0], (hl - 1) & 0xFFFF]
     return 8
 
 define _op_ld_a_bc(ctx) as:
-    ctx[0].a is mem_read of [ctx[1], get_bc of ctx[0]]
+    ctx[0].a is cpu_mem_read of [ctx[0], ctx[1], get_bc of ctx[0]]
     return 8
 define _op_ld_a_de(ctx) as:
-    ctx[0].a is mem_read of [ctx[1], get_de of ctx[0]]
+    ctx[0].a is cpu_mem_read of [ctx[0], ctx[1], get_de of ctx[0]]
     return 8
 define _op_ld_a_hli(ctx) as:
     hl is get_hl of ctx[0]
-    ctx[0].a is mem_read of [ctx[1], hl]
+    ctx[0].a is cpu_mem_read of [ctx[0], ctx[1], hl]
     set_hl of [ctx[0], (hl + 1) & 0xFFFF]
     return 8
 define _op_ld_a_hld(ctx) as:
     hl is get_hl of ctx[0]
-    ctx[0].a is mem_read of [ctx[1], hl]
+    ctx[0].a is cpu_mem_read of [ctx[0], ctx[1], hl]
     set_hl of [ctx[0], (hl - 1) & 0xFFFF]
     return 8
 
@@ -177,7 +177,8 @@ define _op_inc_l(ctx) as:
     return 4
 define _op_inc_hl_ind(ctx) as:
     hl is get_hl of ctx[0]
-    mem_write of [ctx[1], hl, alu_inc of [ctx[0], mem_read of [ctx[1], hl]]]
+    val is cpu_mem_read of [ctx[0], ctx[1], hl]
+    cpu_mem_write of [ctx[0], ctx[1], hl, alu_inc of [ctx[0], val]]
     return 12
 define _op_inc_a(ctx) as:
     ctx[0].a is alu_inc of [ctx[0], ctx[0].a]
@@ -203,7 +204,8 @@ define _op_dec_l(ctx) as:
     return 4
 define _op_dec_hl_ind(ctx) as:
     hl is get_hl of ctx[0]
-    mem_write of [ctx[1], hl, alu_dec of [ctx[0], mem_read of [ctx[1], hl]]]
+    val is cpu_mem_read of [ctx[0], ctx[1], hl]
+    cpu_mem_write of [ctx[0], ctx[1], hl, alu_dec of [ctx[0], val]]
     return 12
 define _op_dec_a(ctx) as:
     ctx[0].a is alu_dec of [ctx[0], ctx[0].a]
@@ -228,7 +230,7 @@ define _op_ld_l_d8(ctx) as:
     ctx[0].l is fetch8 of [ctx[0], ctx[1]]
     return 8
 define _op_ld_hl_d8(ctx) as:
-    mem_write of [ctx[1], get_hl of ctx[0], fetch8 of [ctx[0], ctx[1]]]
+    cpu_mem_write of [ctx[0], ctx[1], get_hl of ctx[0], fetch8 of [ctx[0], ctx[1]]]
     return 12
 define _op_ld_a_d8(ctx) as:
     ctx[0].a is fetch8 of [ctx[0], ctx[1]]
@@ -253,8 +255,8 @@ define _op_rra(ctx) as:
 
 define _op_ld_a16_sp(ctx) as:
     addr is fetch16 of [ctx[0], ctx[1]]
-    mem_write of [ctx[1], addr, ctx[0].sp & 0xFF]
-    mem_write of [ctx[1], (addr + 1) & 0xFFFF, ctx[0].sp >> 8]
+    cpu_mem_write of [ctx[0], ctx[1], addr, ctx[0].sp & 0xFF]
+    cpu_mem_write of [ctx[0], ctx[1], (addr + 1) & 0xFFFF, ctx[0].sp >> 8]
     return 20
 
 define _op_jr(ctx) as:
@@ -539,22 +541,22 @@ define _op_rst_38(ctx) as:
 
 # LDH / LD (C), A etc
 define _op_ldh_a8_a(ctx) as:
-    mem_write of [ctx[1], 0xFF00 | (fetch8 of [ctx[0], ctx[1]]), ctx[0].a]
+    cpu_mem_write of [ctx[0], ctx[1], 0xFF00 | (fetch8 of [ctx[0], ctx[1]]), ctx[0].a]
     return 12
 define _op_ldh_a_a8(ctx) as:
-    ctx[0].a is mem_read of [ctx[1], 0xFF00 | (fetch8 of [ctx[0], ctx[1]])]
+    ctx[0].a is cpu_mem_read of [ctx[0], ctx[1], 0xFF00 | (fetch8 of [ctx[0], ctx[1]])]
     return 12
 define _op_ld_c_a(ctx) as:
-    mem_write of [ctx[1], 0xFF00 | ctx[0].c, ctx[0].a]
+    cpu_mem_write of [ctx[0], ctx[1], 0xFF00 | ctx[0].c, ctx[0].a]
     return 8
 define _op_ld_a_c(ctx) as:
-    ctx[0].a is mem_read of [ctx[1], 0xFF00 | ctx[0].c]
+    ctx[0].a is cpu_mem_read of [ctx[0], ctx[1], 0xFF00 | ctx[0].c]
     return 8
 define _op_ld_a16_a(ctx) as:
-    mem_write of [ctx[1], fetch16 of [ctx[0], ctx[1]], ctx[0].a]
+    cpu_mem_write of [ctx[0], ctx[1], fetch16 of [ctx[0], ctx[1]], ctx[0].a]
     return 16
 define _op_ld_a_a16(ctx) as:
-    ctx[0].a is mem_read of [ctx[1], fetch16 of [ctx[0], ctx[1]]]
+    ctx[0].a is cpu_mem_read of [ctx[0], ctx[1], fetch16 of [ctx[0], ctx[1]]]
     return 16
 
 define _op_add_sp_s8(ctx) as:
@@ -790,6 +792,7 @@ _op_table[0xFF] is _op_rst_38
 _exec_ctx is [null, null, 0]
 
 define exec_op(cpu, mem) as:
+    cpu.stepped_cycles is 0
     op is fetch8 of [cpu, mem]
     _exec_ctx[0] is cpu
     _exec_ctx[1] is mem

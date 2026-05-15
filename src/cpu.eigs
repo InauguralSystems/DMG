@@ -21,6 +21,7 @@ define new_cpu() as:
         "ime": 0,
         "halted": 0,
         "cycles": 0,
+        "stepped_cycles": 0,
         "stopped": 0
     }
 
@@ -39,6 +40,7 @@ define cpu_reset(cpu) as:
     cpu.ime is 1
     cpu.halted is 0
     cpu.cycles is 0
+    cpu.stepped_cycles is 0
 
 # ---- Register pair helpers ----
 
@@ -106,15 +108,27 @@ define set_flags(cpu, z, n, h, c) as:
 
 # ---- Fetch helpers ----
 
+define cpu_tick(cpu, mem, cycles) as:
+    cpu.stepped_cycles += cycles
+
+define cpu_mem_read(cpu, mem, addr) as:
+    val is mem_read of [mem, addr]
+    cpu_tick of [cpu, mem, 4]
+    return val
+
+define cpu_mem_write(cpu, mem, addr, val) as:
+    mem_write of [mem, addr, val]
+    cpu_tick of [cpu, mem, 4]
+
 define fetch8(cpu, mem) as:
-    val is mem_read of [mem, cpu.pc]
+    val is cpu_mem_read of [cpu, mem, cpu.pc]
     cpu.pc is (cpu.pc + 1) & 0xFFFF
     return val
 
 define fetch16(cpu, mem) as:
-    lo is mem_read of [mem, cpu.pc]
+    lo is cpu_mem_read of [cpu, mem, cpu.pc]
     cpu.pc is (cpu.pc + 1) & 0xFFFF
-    hi is mem_read of [mem, cpu.pc]
+    hi is cpu_mem_read of [cpu, mem, cpu.pc]
     cpu.pc is (cpu.pc + 1) & 0xFFFF
     return hi << 8 | lo
 
