@@ -166,4 +166,23 @@ exec_op of [cpu, mem]
 assert of [(flag_z of cpu) == 1, "BIT 7 of 0x7F = zero"]
 print of "  CB BIT: ok"
 
+# ---- STOP / CGB speed switch ----
+cpu is new_cpu of null
+mem is new_memory of null
+cpu.pc is 0x0100
+load_bytes of [mem, 0x0100, [0x10, 0x00]]
+exec_op of [cpu, mem]
+assert of [cpu.stopped == 1, "STOP without KEY1 arms stopped state"]
+assert of [cpu.pc == 0x0102, "STOP consumes padding byte"]
+
+cpu is new_cpu of null
+mem is new_memory of null
+cpu.pc is 0x0100
+mem.data[0xFF4D] is 0x01
+load_bytes of [mem, 0x0100, [0x10, 0x00]]
+exec_op of [cpu, mem]
+assert of [cpu.stopped == 0, "STOP with KEY1 speed request continues"]
+assert of [mem.data[0xFF4D] == 0x80, "STOP toggles KEY1 speed bit on"]
+print of "  STOP/KEY1: ok"
+
 print of "\n=== All CPU tests passed ==="

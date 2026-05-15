@@ -234,13 +234,13 @@ if gfx_mode == 1:
             cycles is exec_op of [cpu, mem]
             frame_cycles += cycles
 
-            _pending_cycles += cycles
-            if _pending_cycles >= 64:
-                timer_step of [mem, _pending_cycles]
-                lcd_step of [mem, _pending_cycles]
-                int_cycles is handle_interrupts of [cpu, mem]
-                frame_cycles += int_cycles
-                _pending_cycles is 0
+            timer_step of [mem, cycles]
+            lcd_step of [mem, cycles]
+            int_cycles is handle_interrupts of [cpu, mem]
+            if int_cycles > 0:
+                timer_step of [mem, int_cycles]
+                lcd_step of [mem, int_cycles]
+            frame_cycles += int_cycles
 
         total_cycles += frame_cycles
 
@@ -315,13 +315,13 @@ if gfx_mode == 0:
         cycles is exec_op of [cpu, mem]
         total_cycles += cycles
 
-        _pending_cycles += cycles
-        if _pending_cycles >= 64:
-            timer_step of [mem, _pending_cycles]
-            lcd_step of [mem, _pending_cycles]
-            int_cycles is handle_interrupts of [cpu, mem]
-            total_cycles += int_cycles
-            _pending_cycles is 0
+        timer_step of [mem, cycles]
+        lcd_step of [mem, cycles]
+        int_cycles is handle_interrupts of [cpu, mem]
+        if int_cycles > 0:
+            timer_step of [mem, int_cycles]
+            lcd_step of [mem, int_cycles]
+        total_cycles += int_cycles
 
         # Check for Blargg test output every 1M cycles
         if total_cycles % 1000000 < 100:
