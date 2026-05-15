@@ -304,6 +304,11 @@ define _op_ccf(ctx) as:
     return 4
 
 define _op_halt(ctx) as:
+    pending is ctx[1].ie & ctx[1].if_reg & 0x1F
+    if ctx[0].ime == 0 and pending != 0:
+        ctx[0].halted is 0
+        ctx[0].halt_bug is 1
+        return 4
     ctx[0].halted is 1
     return 4
 
@@ -390,6 +395,7 @@ define _op_ret(ctx) as:
 define _op_reti(ctx) as:
     ctx[0].pc is pop16 of [ctx[0], ctx[1]]
     ctx[0].ime is 1
+    ctx[0].ime_delay is 0
     return 16
 define _op_ret_nz(ctx) as:
     if (flag_z of ctx[0]) == 0:
@@ -591,9 +597,10 @@ define _op_ld_sp_hl(ctx) as:
 
 define _op_di(ctx) as:
     ctx[0].ime is 0
+    ctx[0].ime_delay is 0
     return 4
 define _op_ei(ctx) as:
-    ctx[0].ime is 1
+    ctx[0].ime_delay is 2
     return 4
 
 # CB prefix handler
@@ -793,8 +800,17 @@ _exec_ctx is [null, null, 0]
 
 define exec_op(cpu, mem) as:
     cpu.stepped_cycles is 0
-    op is fetch8 of [cpu, mem]
+    if cpu.halt_bug == 1:
+        cpu.halt_bug is 0
+        op is cpu_mem_read of [cpu, mem, cpu.pc]
+    else:
+        op is fetch8 of [cpu, mem]
     _exec_ctx[0] is cpu
     _exec_ctx[1] is mem
     _exec_ctx[2] is op
-    return dispatch of [_op_table, op, _exec_ctx]
+    cycles is dispatch of [_op_table, op, _exec_ctx]
+    if cpu.ime_delay > 0:
+        cpu.ime_delay -= 1
+        if cpu.ime_delay == 0:
+            cpu.ime is 1
+    return cycles

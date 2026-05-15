@@ -19,7 +19,9 @@ define new_cpu() as:
         "h": 0, "l": 0,
         "sp": 0, "pc": 0,
         "ime": 0,
+        "ime_delay": 0,
         "halted": 0,
+        "halt_bug": 0,
         "cycles": 0,
         "stepped_cycles": 0,
         "stopped": 0
@@ -38,7 +40,9 @@ define cpu_reset(cpu) as:
     cpu.sp is 0xFFFE
     cpu.pc is 0x0100
     cpu.ime is 1
+    cpu.ime_delay is 0
     cpu.halted is 0
+    cpu.halt_bug is 0
     cpu.cycles is 0
     cpu.stepped_cycles is 0
 

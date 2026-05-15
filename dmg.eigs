@@ -108,7 +108,7 @@ INT_JOYPAD  is 0x10
 define handle_interrupts(cpu, mem) as:
     if cpu.ime == 0 and cpu.halted == 0:
         return 0
-    pending is mem.ie & mem.if_reg
+    pending is mem.ie & mem.if_reg & 0x1F
     if pending == 0:
         return 0
 
@@ -119,6 +119,7 @@ define handle_interrupts(cpu, mem) as:
 
     cpu.stepped_cycles is 0
     cpu.ime is 0
+    cpu.ime_delay is 0
 
     if (pending & INT_VBLANK) != 0:
         mem.if_reg &= 0xFF ^ INT_VBLANK
