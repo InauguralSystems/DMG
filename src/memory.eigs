@@ -21,8 +21,11 @@ define new_memory() as:
         "ram_bank": 0,
         "ram_enable": 0,
         "mbc_type": 0,
+        "cgb_mode": 0,
         "rom_len": 0,
         "serial_output": "",
+        "apu_ch1_cycles": 0,
+        "apu_ch2_cycles": 0,
         "ie": 0,
         "if_reg": 0,
         "joypad": null
@@ -46,6 +49,8 @@ define load_rom(mem, path) as:
 
     # Detect MBC type from cartridge header (0x0147)
     if rom_len > 0x0148:
+        if bytes[0x0143] == 0xC0:
+            mem.cgb_mode is 1
         cart_type is bytes[0x0147]
         if cart_type >= 1 and cart_type <= 3:
             mem.mbc_type is 1
@@ -94,6 +99,15 @@ define mem_read(mem, addr) as:
     # IF register
     if addr == 0xFF0F:
         return mem.if_reg
+
+    # NR52 sound status
+    if addr == 0xFF26:
+        status is mem.data[addr] & 0xF0
+        if mem.apu_ch1_cycles > 0:
+            status |= 0x01
+        if mem.apu_ch2_cycles > 0:
+            status |= 0x02
+        return status
 
     return mem.data[addr]
 
@@ -152,6 +166,30 @@ define mem_write(mem, addr, val) as:
             ch is mem.data[0xFF01]
             mem.serial_output is f"{mem.serial_output}{chr of ch}"
         mem.data[addr] is val
+        return null
+
+    # Minimal APU length/status behavior used by Blargg timing ROMs
+    if addr == 0xFF14:
+        mem.data[addr] is val
+        if (val & 0x80) != 0:
+            length is 64 - (mem.data[0xFF11] & 0x3F)
+            if length == 0:
+                length is 64
+            mem.apu_ch1_cycles is length * 16384
+        return null
+    if addr == 0xFF19:
+        mem.data[addr] is val
+        if (val & 0x80) != 0:
+            length is 64 - (mem.data[0xFF16] & 0x3F)
+            if length == 0:
+                length is 64
+            mem.apu_ch2_cycles is length * 16384
+        return null
+    if addr == 0xFF26:
+        mem.data[addr] is val & 0x80
+        if (val & 0x80) == 0:
+            mem.apu_ch1_cycles is 0
+            mem.apu_ch2_cycles is 0
         return null
 
     # DMA transfer (0xFF46)
