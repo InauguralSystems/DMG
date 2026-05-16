@@ -17,12 +17,19 @@ define new_memory() as:
     return {
         "data": buffer of 65536,
         "rom": [],
+        "cart_ram": buffer of 1,
         "rom_bank": 1,
         "ram_bank": 0,
         "ram_enable": 0,
         "mbc_type": 0,
+        "mbc1_rom_low5": 1,
+        "mbc1_bank2": 0,
+        "mbc1_mode": 0,
+        "mbc5_rom_low8": 1,
+        "mbc5_rom_high1": 0,
         "cgb_mode": 0,
         "rom_len": 0,
+        "cart_ram_len": 0,
         "serial_output": "",
         "apu_ch1_cycles": 0,
         "apu_ch2_cycles": 0,
@@ -30,6 +37,73 @@ define new_memory() as:
         "if_reg": 0,
         "joypad": null
     }
+
+define rom_bank_count(mem) as:
+    if mem.rom_len <= 0:
+        return 0
+    return floor of ((mem.rom_len + 0x3FFF) / 0x4000)
+
+define normalize_rom_bank(mem, bank) as:
+    count is rom_bank_count of mem
+    bank is floor of bank
+    if count <= 0:
+        return bank
+    bank is bank % count
+    if bank < 0:
+        bank += count
+    return bank
+
+define read_rom_bank(mem, bank, offset) as:
+    bank is normalize_rom_bank of [mem, bank]
+    rom_addr is (bank * 0x4000) + offset
+    if rom_addr >= 0 and rom_addr < mem.rom_len:
+        return mem.rom[rom_addr]
+    return 0xFF
+
+define cart_ram_size_from_header(code) as:
+    if code == 0x01:
+        return 2048
+    if code == 0x02:
+        return 8192
+    if code == 0x03:
+        return 32768
+    if code == 0x04:
+        return 131072
+    if code == 0x05:
+        return 65536
+    return 0
+
+define mbc1_update_banks(mem) as:
+    low is mem.mbc1_rom_low5 & 0x1F
+    if low == 0:
+        low is 1
+    mem.rom_bank is ((mem.mbc1_bank2 & 0x03) << 5) | low
+    if mem.mbc1_mode == 1:
+        mem.ram_bank is mem.mbc1_bank2 & 0x03
+    else:
+        mem.ram_bank is 0
+    return null
+
+define cart_ram_enabled(mem) as:
+    if mem.mbc_type == 0:
+        return 1
+    if mem.ram_enable:
+        return 1
+    return 0
+
+define cart_ram_offset(mem, addr) as:
+    if mem.cart_ram_len <= 0:
+        return -1
+    bank is 0
+    if mem.mbc_type == 1:
+        if mem.mbc1_mode == 1:
+            bank is mem.ram_bank
+    elif mem.mbc_type == 3 or mem.mbc_type == 5:
+        bank is mem.ram_bank
+    offset is (bank * 0x2000) + (addr - 0xA000)
+    if offset >= mem.cart_ram_len:
+        offset is offset % mem.cart_ram_len
+    return offset
 
 define load_rom(mem, path) as:
     bytes is read_bytes_buf of path
@@ -39,6 +113,17 @@ define load_rom(mem, path) as:
     mem.rom is bytes
     rom_len is buf_len of bytes
     mem.rom_len is rom_len
+    mem.rom_bank is 1
+    mem.ram_bank is 0
+    mem.ram_enable is 0
+    mem.mbc_type is 0
+    mem.mbc1_rom_low5 is 1
+    mem.mbc1_bank2 is 0
+    mem.mbc1_mode is 0
+    mem.mbc5_rom_low8 is 1
+    mem.mbc5_rom_high1 is 0
+    mem.cart_ram_len is 0
+    mem.cart_ram is buffer of 1
 
     # Copy first 32KB into memory (bank 0 + bank 1)
     limit is rom_len
@@ -58,6 +143,10 @@ define load_rom(mem, path) as:
             mem.mbc_type is 3
         elif cart_type >= 0x19 and cart_type <= 0x1E:
             mem.mbc_type is 5
+        ram_size is cart_ram_size_from_header of bytes[0x0149]
+        mem.cart_ram_len is ram_size
+        if ram_size > 0:
+            mem.cart_ram is buffer of ram_size
 
     title is ""
     for i in range of 16:
@@ -72,14 +161,31 @@ define mem_read(mem, addr) as:
 
     # ROM bank 0
     if addr < 0x4000:
+        if mem.rom_len > 0 and mem.mbc_type == 1 and mem.mbc1_mode == 1:
+            bank0 is (mem.mbc1_bank2 & 0x03) << 5
+            if bank0 != 0:
+                return read_rom_bank of [mem, bank0, addr]
         return mem.data[addr]
 
     # ROM bank N (switchable)
     if addr < 0x8000:
         if mem.mbc_type > 0 and mem.rom_len > 0:
-            rom_addr is (mem.rom_bank * 0x4000) + (addr - 0x4000)
-            if rom_addr < mem.rom_len:
+            offset is addr - 0x4000
+            rom_addr is (mem.rom_bank * 0x4000) + offset
+            if rom_addr >= 0 and rom_addr < mem.rom_len:
                 return mem.rom[rom_addr]
+            return read_rom_bank of [mem, mem.rom_bank, offset]
+        return mem.data[addr]
+
+    # External cartridge RAM
+    if addr >= 0xA000 and addr < 0xC000:
+        if mem.cart_ram_len > 0:
+            if (cart_ram_enabled of mem) == 0:
+                return 0xFF
+            offset is cart_ram_offset of [mem, addr]
+            if offset >= 0:
+                return mem.cart_ram[offset]
+            return 0xFF
         return mem.data[addr]
 
     # Echo RAM
@@ -121,12 +227,14 @@ define mem_write(mem, addr, val) as:
             if addr < 0x2000:
                 mem.ram_enable is (val & 0x0F) == 0x0A
             elif addr < 0x4000:
-                bank is val & 0x1F
-                if bank == 0:
-                    bank is 1
-                mem.rom_bank is bank
+                mem.mbc1_rom_low5 is val & 0x1F
+                mbc1_update_banks of mem
             elif addr < 0x6000:
-                mem.ram_bank is val & 0x03
+                mem.mbc1_bank2 is val & 0x03
+                mbc1_update_banks of mem
+            else:
+                mem.mbc1_mode is val & 0x01
+                mbc1_update_banks of mem
         elif mem.mbc_type == 3:
             if addr < 0x2000:
                 mem.ram_enable is (val & 0x0F) == 0x0A
@@ -135,6 +243,32 @@ define mem_write(mem, addr, val) as:
                 if bank == 0:
                     bank is 1
                 mem.rom_bank is bank
+            elif addr < 0x6000:
+                if val <= 0x03:
+                    mem.ram_bank is val & 0x03
+        elif mem.mbc_type == 5:
+            if addr < 0x2000:
+                mem.ram_enable is (val & 0x0F) == 0x0A
+            elif addr < 0x3000:
+                mem.mbc5_rom_low8 is val
+                mem.rom_bank is ((mem.mbc5_rom_high1 & 0x01) << 8) | mem.mbc5_rom_low8
+            elif addr < 0x4000:
+                mem.mbc5_rom_high1 is val & 0x01
+                mem.rom_bank is ((mem.mbc5_rom_high1 & 0x01) << 8) | mem.mbc5_rom_low8
+            elif addr < 0x6000:
+                mem.ram_bank is val & 0x0F
+        return null
+
+    # External cartridge RAM
+    if addr >= 0xA000 and addr < 0xC000:
+        if mem.cart_ram_len > 0:
+            if (cart_ram_enabled of mem) != 0:
+                offset is cart_ram_offset of [mem, addr]
+                if offset >= 0:
+                    mem.cart_ram[offset] is val
+            return null
+
+        mem.data[addr] is val
         return null
 
     # Echo RAM

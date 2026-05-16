@@ -1,0 +1,148 @@
+# ============================================================
+# DMG Memory / MBC unit tests
+# ============================================================
+
+load_file of "src/memory.eigs"
+
+print of "=== DMG memory tests ==="
+
+define attach_rom(mem, banks, mbc_type) as:
+    size is banks * 0x4000
+    rom is buffer of size
+    for bank in range of banks:
+        base is bank * 0x4000
+        rom[base] is bank & 0xFF
+        rom[base + 0x1234] is (bank + 0x31) & 0xFF
+        rom[base + 0x3FFF] is (bank + 0x7B) & 0xFF
+    mem.rom is rom
+    mem.rom_len is size
+    mem.mbc_type is mbc_type
+    limit is size
+    if limit > 0x8000:
+        limit is 0x8000
+    for i in range of limit:
+        mem.data[i] is rom[i]
+    return null
+
+define enable_cart_ram(mem, size) as:
+    mem.cart_ram is buffer of size
+    mem.cart_ram_len is size
+    return null
+
+# ---- MBC1 ROM bank low/high bits and banking mode ----
+mem is new_memory of null
+attach_rom of [mem, 64, 1]
+assert of [mem_read of [mem, 0x4000] == 1, "MBC1 starts on ROM bank 1"]
+
+mem_write of [mem, 0x2000, 0x00]
+assert of [mem.rom_bank == 1, "MBC1 bank 0 remaps to bank 1"]
+assert of [mem_read of [mem, 0x4000] == 1, "MBC1 bank 0 read remaps to bank 1"]
+
+mem_write of [mem, 0x2000, 0x02]
+assert of [mem.rom_bank == 2, "MBC1 low bank selects bank 2"]
+assert of [mem_read of [mem, 0x4000] == 2, "MBC1 reads bank 2"]
+
+mem_write of [mem, 0x4000, 0x01]
+assert of [mem.rom_bank == 0x22, f"MBC1 high bits select bank 0x22, got 0x{mem.rom_bank}"]
+assert of [mem_read of [mem, 0x4000] == 0x22, "MBC1 reads high ROM bank"]
+
+mem_write of [mem, 0x6000, 0x01]
+assert of [mem.ram_bank == 1, "MBC1 RAM banking mode exposes RAM bank select"]
+assert of [mem_read of [mem, 0x1234] == ((0x20 + 0x31) & 0xFF), "MBC1 mode 1 banks the low ROM window"]
+print of "  MBC1 ROM banking: ok"
+
+# ---- MBC1 external RAM enable and banking mode ----
+mem is new_memory of null
+mem.mbc_type is 1
+enable_cart_ram of [mem, 0x8000]
+
+assert of [mem_read of [mem, 0xA000] == 0xFF, "MBC1 disabled RAM reads as 0xFF"]
+mem_write of [mem, 0xA000, 0x12]
+assert of [mem_read of [mem, 0xA000] == 0xFF, "MBC1 disabled RAM ignores writes"]
+
+mem_write of [mem, 0x0000, 0x0A]
+mem_write of [mem, 0xA000, 0x34]
+assert of [mem_read of [mem, 0xA000] == 0x34, "MBC1 enabled RAM bank 0 write/read"]
+
+mem_write of [mem, 0x4000, 0x02]
+assert of [mem.ram_bank == 0, "MBC1 mode 0 keeps effective RAM bank 0"]
+mem_write of [mem, 0xA000, 0x45]
+assert of [mem_read of [mem, 0xA000] == 0x45, "MBC1 mode 0 still writes RAM bank 0"]
+
+mem_write of [mem, 0x6000, 0x01]
+assert of [mem.ram_bank == 2, "MBC1 mode 1 selects RAM bank 2"]
+assert of [mem_read of [mem, 0xA000] == 0x00, "MBC1 RAM bank 2 starts separate"]
+mem_write of [mem, 0xA000, 0x56]
+assert of [mem_read of [mem, 0xA000] == 0x56, "MBC1 RAM bank 2 write/read"]
+
+mem_write of [mem, 0x4000, 0x00]
+assert of [mem.ram_bank == 0, "MBC1 can switch back to RAM bank 0"]
+assert of [mem_read of [mem, 0xA000] == 0x45, "MBC1 RAM bank 0 value preserved"]
+print of "  MBC1 RAM banking: ok"
+
+# ---- MBC3 RAM bank select ----
+mem is new_memory of null
+mem.mbc_type is 3
+enable_cart_ram of [mem, 0x8000]
+mem_write of [mem, 0x0000, 0x0A]
+mem_write of [mem, 0x4000, 0x01]
+mem_write of [mem, 0xA000, 0x61]
+mem_write of [mem, 0x4000, 0x02]
+mem_write of [mem, 0xA000, 0x72]
+assert of [mem_read of [mem, 0xA000] == 0x72, "MBC3 RAM bank 2 read"]
+mem_write of [mem, 0x4000, 0x01]
+assert of [mem_read of [mem, 0xA000] == 0x61, "MBC3 RAM bank 1 preserved"]
+print of "  MBC3 RAM banking: ok"
+
+# ---- MBC5 9-bit ROM bank select and RAM bank select ----
+mem is new_memory of null
+mem.mbc_type is 5
+mem.rom is buffer of (258 * 0x4000)
+mem.rom_len is 258 * 0x4000
+mem.rom[0x0000] is 0x40
+mem.rom[0x4000] is 0x41
+mem.rom[2 * 0x4000] is 0x42
+mem.rom[257 * 0x4000] is 0xA5
+for i in range of 0x8000:
+    mem.data[i] is mem.rom[i]
+
+mem_write of [mem, 0x2000, 0x00]
+mem_write of [mem, 0x3000, 0x00]
+assert of [mem.rom_bank == 0, "MBC5 allows switchable ROM bank 0"]
+assert of [mem_read of [mem, 0x4000] == 0x40, "MBC5 bank 0 read"]
+
+mem_write of [mem, 0x2000, 0x02]
+assert of [mem.rom_bank == 2, "MBC5 low ROM bank register"]
+assert of [mem_read of [mem, 0x4000] == 0x42, "MBC5 bank 2 read"]
+
+mem_write of [mem, 0x2000, 0x01]
+mem_write of [mem, 0x3000, 0x01]
+assert of [mem.rom_bank == 0x101, f"MBC5 9-bit bank expected 0x101, got 0x{mem.rom_bank}"]
+assert of [mem_read of [mem, 0x4000] == 0xA5, "MBC5 high ROM bank read"]
+
+enable_cart_ram of [mem, 0x20000]
+mem_write of [mem, 0x0000, 0x0A]
+mem_write of [mem, 0x4000, 0x0F]
+mem_write of [mem, 0xA000, 0x9F]
+mem_write of [mem, 0x4000, 0x00]
+assert of [mem_read of [mem, 0xA000] == 0x00, "MBC5 RAM bank 0 separate from bank 15"]
+mem_write of [mem, 0x4000, 0x0F]
+assert of [mem_read of [mem, 0xA000] == 0x9F, "MBC5 RAM bank 15 preserved"]
+print of "  MBC5 banking: ok"
+
+# ---- Echo RAM and DMA transfer ----
+mem is new_memory of null
+mem_write of [mem, 0xE000, 0x88]
+assert of [mem.data[0xC000] == 0x88, "Echo RAM write maps to WRAM"]
+mem_write of [mem, 0xC001, 0x99]
+assert of [mem_read of [mem, 0xE001] == 0x99, "Echo RAM read maps to WRAM"]
+
+for i in range of 160:
+    mem_write of [mem, 0xC000 + i, (i * 3) & 0xFF]
+mem_write of [mem, 0xFF46, 0xC0]
+assert of [mem.data[0xFE00] == 0, "DMA copied OAM first byte"]
+assert of [mem.data[0xFE01] == 3, "DMA copied OAM second byte"]
+assert of [mem.data[0xFE9F] == ((159 * 3) & 0xFF), "DMA copied OAM last byte"]
+print of "  Echo RAM and DMA: ok"
+
+print of "\n=== All memory tests passed ==="

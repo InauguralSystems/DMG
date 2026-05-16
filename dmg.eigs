@@ -154,13 +154,13 @@ define handle_interrupts(cpu, mem) as:
 # ============================================================
 
 define blargg_ram_output_ready(mem) as:
-    return mem.data[0xA001] == 0xDE and mem.data[0xA002] == 0xB0 and mem.data[0xA003] == 0x61
+    return (mem_read of [mem, 0xA001]) == 0xDE and (mem_read of [mem, 0xA002]) == 0xB0 and (mem_read of [mem, 0xA003]) == 0x61
 
 define blargg_ram_output_text(mem) as:
     text is ""
     offset is 0
     loop while offset < 4096:
-        ch is mem.data[0xA004 + offset]
+        ch is mem_read of [mem, 0xA004 + offset]
         if ch == 0:
             break
         text is f"{text}{chr of ch}"
@@ -171,7 +171,7 @@ define print_blargg_ram_output(mem) as:
     text is blargg_ram_output_text of mem
     if (len of text) > 0:
         print of f"\n{text}"
-    print of f"Blargg RAM result: {mem.data[0xA000]}"
+    print of f"Blargg RAM result: {mem_read of [mem, 0xA000]}"
 
 # ============================================================
 # Argument parsing
@@ -511,7 +511,7 @@ if gfx_mode == 0:
                     print of f"\n{mem.serial_output}"
                     break
             if blargg_ram_output_ready of mem:
-                ram_result is mem.data[0xA000]
+                ram_result is mem_read of [mem, 0xA000]
                 if ram_result != 0x80:
                     print_blargg_ram_output of mem
                     printed_ram_output is 1
