@@ -42,8 +42,13 @@ POKEMON_RED_ROM=/path/to/pokemon-red.gb tests/run_pokemon_red_smoke.sh
 #           POKEMON_RED_TIMEOUT_SECONDS, POKEMON_RED_MAX_RSS_KB
 # Back-compat single budget: POKEMON_RED_CYCLES=5000000 tests/run_pokemon_red_smoke.sh
 
+# Optional bounded SDL/gfx smoke test (uses SDL_VIDEODRIVER=dummy by default)
+EIGENSCRIPT_GFX=/path/to/gfx-built/eigenscript tests/run_gfx_smoke.sh
+# Tunables: DMG_GFX_ROM, DMG_GFX_FRAMES, DMG_GFX_FRAMESKIP, DMG_GFX_SCALE, DMG_GFX_TIMEOUT_SECONDS
+
 # Graphical
 eigenscript dmg.eigs roms/pokemon-red.gb --gfx --scale 3 --frameskip 2
+eigenscript dmg.eigs roms/pokemon-red.gb --gfx --gfx-frames 120 --scale 3 --frameskip 2
 ```
 
 Keys: arrows = D-pad, Z = A, X = B, Return = Start, Backspace = Select, Escape = quit.

@@ -4,7 +4,7 @@
 # Headless mode: runs ROM, captures serial output (for Blargg tests)
 # Graphical mode (--gfx): renders to SDL2 window with joypad input
 #
-# Usage: eigenscript dmg.eigs <rom_path> [--cycles N] [--gfx] [--frameskip N] [--scale N]
+# Usage: eigenscript dmg.eigs <rom_path> [--cycles N] [--gfx] [--gfx-frames N] [--frameskip N] [--scale N]
 #        [--input-script cycle:button:duration,...] [--render-probe]
 
 load_file of "src/cpu.eigs"
@@ -179,12 +179,13 @@ define print_blargg_ram_output(mem) as:
 
 argv is args of null
 if (len of argv) < 1:
-    print of "Usage: eigenscript dmg.eigs <rom_path> [--cycles N] [--gfx] [--frameskip N] [--scale N] [--input-script cycle:button:duration,...] [--render-probe]"
+    print of "Usage: eigenscript dmg.eigs <rom_path> [--cycles N] [--gfx] [--gfx-frames N] [--frameskip N] [--scale N] [--input-script cycle:button:duration,...] [--render-probe]"
     assert of [0, "no ROM path provided"]
 
 rom_path is argv[0]
 max_cycles is 50000000
 gfx_mode is 0
+gfx_frame_limit is 0
 frameskip is 2
 gfx_scale is 3
 input_script is ""
@@ -197,6 +198,9 @@ loop while i < (len of argv):
         max_cycles is floor of (num of argv[i])
     elif argv[i] == "--gfx":
         gfx_mode is 1
+    elif argv[i] == "--gfx-frames" and i + 1 < (len of argv):
+        i += 1
+        gfx_frame_limit is floor of (num of argv[i])
     elif argv[i] == "--frameskip" and i + 1 < (len of argv):
         i += 1
         frameskip is floor of (num of argv[i])
@@ -333,6 +337,8 @@ if gfx_mode == 1:
     win_h is 144 * gfx_scale
     gfx_open of [win_w, win_h, "DMG"]
     print of f"Graphical mode: {win_w}x{win_h} (scale {gfx_scale}, frameskip {frameskip})"
+    if gfx_frame_limit > 0:
+        print of f"Graphical frame limit: {gfx_frame_limit}"
 
     running is 1
     last_title_update is 0
@@ -418,6 +424,9 @@ if gfx_mode == 1:
                 mhz is (total_cycles / (elapsed / 1000)) / 1000000
                 gfx_title of f"DMG — {mhz} MHz — frame {ppu.frame_count}"
             last_title_update is t_now
+
+        if gfx_frame_limit > 0 and ppu.frame_count >= gfx_frame_limit:
+            running is 0
 
     gfx_close of null
 
