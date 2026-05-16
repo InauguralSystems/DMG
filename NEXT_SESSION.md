@@ -80,6 +80,17 @@ Passed:
 - `interrupt_time`, cycles `3000000`
 - peak RSS: `10752 KB`
 
+Blargg CPU instruction aggregate:
+
+```bash
+BLARGG_CPU_INSTRS_MODE=aggregate tests/run_blargg_cpu_instrs_suite.sh
+```
+
+Passed:
+
+- `cpu_instrs`, cycles `225000004`
+- peak RSS: `10624 KB`
+
 CPU tests:
 
 ```bash
@@ -87,6 +98,18 @@ CPU tests:
 ```
 
 Passed all CPU unit tests.
+
+New CPU instruction suite runner:
+
+```bash
+tests/run_blargg_cpu_instrs_suite.sh
+```
+
+Runs the aggregate `roms/cpu_instrs.gb` and every committed individual
+`roms/individual/01.gb` through `roms/individual/11.gb` serially with separate
+aggregate/individual cycle and timeout guards plus an RSS guard. Use
+`BLARGG_CPU_INSTRS_MODE=aggregate` or `BLARGG_CPU_INSTRS_MODE=individual` for
+targeted reruns.
 
 ## Next Session Plan
 
@@ -106,11 +129,14 @@ git merge --ff-only origin/master
 gh pr view 6 --json state,mergedAt,mergeCommit,url
 ```
 
-3. Start the next Blargg bucket. The likely next target is durable CPU instruction ROM coverage:
+3. Run the next Blargg bucket. The durable CPU instruction ROM coverage now has a runner:
 
-- run the aggregate `roms/cpu_instrs.gb`
-- run all committed individual ROMs in `roms/individual/01.gb` through `roms/individual/11.gb`
-- add a serial runner with timeout and RSS guard, similar to `tests/run_blargg_timing_suite.sh`
+```bash
+tests/run_blargg_cpu_instrs_suite.sh
+```
+
+It runs the aggregate `roms/cpu_instrs.gb` and all committed individual ROMs in
+`roms/individual/01.gb` through `roms/individual/11.gb`.
 
 4. If any individual CPU ROM fails:
 
@@ -126,7 +152,7 @@ gh pr view 6 --json state,mergedAt,mergeCommit,url
 Single ROM:
 
 ```bash
-timeout 180s /home/jon/EigenScript/src/eigenscript dmg.eigs roms/cpu_instrs.gb --cycles 50000000
+timeout 1500s /home/jon/EigenScript/src/eigenscript dmg.eigs roms/cpu_instrs.gb --cycles 260000000
 ```
 
 Pokemon smoke:
@@ -139,6 +165,12 @@ Timing suite:
 
 ```bash
 tests/run_blargg_timing_suite.sh
+```
+
+CPU instruction suite:
+
+```bash
+tests/run_blargg_cpu_instrs_suite.sh
 ```
 
 Gfx smoke:
