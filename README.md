@@ -33,7 +33,11 @@ iteration, sign extension, sort, and loop condition memory leak fixes.
 
 ```
 # Headless (Blargg tests)
-eigenscript dmg.eigs roms/cpu_instrs.gb --cycles 50000000
+eigenscript dmg.eigs roms/cpu_instrs.gb --cycles 260000000
+tests/run_blargg_cpu_instrs_suite.sh
+# Tunables: BLARGG_CPU_INSTRS_AGGREGATE_CYCLES, BLARGG_CPU_INSTRS_INDIVIDUAL_CYCLES,
+#           BLARGG_CPU_INSTRS_AGGREGATE_TIMEOUT_SECONDS, BLARGG_CPU_INSTRS_INDIVIDUAL_TIMEOUT_SECONDS,
+#           BLARGG_CPU_INSTRS_MODE=all|aggregate|individual, BLARGG_CPU_INSTRS_MAX_RSS_KB
 tests/run_blargg_timing_suite.sh
 # Tunables: BLARGG_TIMING_CYCLES, BLARGG_TIMING_TIMEOUT_SECONDS, BLARGG_TIMING_MAX_RSS_KB
 
