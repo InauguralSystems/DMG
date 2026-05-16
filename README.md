@@ -34,6 +34,8 @@ iteration, sign extension, sort, and loop condition memory leak fixes.
 ```
 # Headless (Blargg tests)
 eigenscript dmg.eigs roms/cpu_instrs.gb --cycles 50000000
+tests/run_blargg_timing_suite.sh
+# Tunables: BLARGG_TIMING_CYCLES, BLARGG_TIMING_TIMEOUT_SECONDS, BLARGG_TIMING_MAX_RSS_KB
 
 # Optional Pokemon Red smoke test (ROM is local-only, not committed)
 POKEMON_RED_ROM=/path/to/pokemon-red.gb tests/run_pokemon_red_smoke.sh
