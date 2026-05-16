@@ -12,11 +12,17 @@ DMG `master` now includes PR #5:
 - Added headless render probe coverage.
 - Added bounded real SDL/gfx smoke coverage through `--gfx-frames`.
 
-Current DMG branch:
+DMG `master` also includes PR #6:
 
-- Branch: `codex/dmg-blargg-timing-suite`
-- Draft PR: https://github.com/InauguralSystems/DMG/pull/6
+- PR: https://github.com/InauguralSystems/DMG/pull/6
+- Merge commit: `a507221`
 - Timing-suite commit: `6f18d25 Add Blargg timing suite runner`
+- Added `tests/run_blargg_timing_suite.sh`.
+- Added README documentation for the Blargg timing-suite command.
+
+Current local DMG note:
+
+- This handoff file is a follow-up documentation commit.
 - Status: clean except local-only untracked ROM/profiler files:
   - `roms/pokemon-red.gb`
   - `roms/Pokemon - Red Version (USA, Europe) (SGB Enhanced).gb`
@@ -84,38 +90,36 @@ Passed all CPU unit tests.
 
 ## Next Session Plan
 
-1. Confirm PR #6 state:
+1. Sync local `master` to the latest GitHub state:
 
 ```bash
 cd /home/jon/DMG
 git status -sb
-gh pr view 6 --json number,title,url,isDraft,mergeStateStatus,statusCheckRollup
-```
-
-2. If still clean, mark PR #6 ready and merge it into `master`.
-
-3. Sync local `master` after merge:
-
-```bash
 git fetch origin
 git switch master
 git merge --ff-only origin/master
 ```
 
-4. Start the next Blargg bucket. The likely next target is durable CPU instruction ROM coverage:
+2. Confirm the merged PR state if needed:
+
+```bash
+gh pr view 6 --json state,mergedAt,mergeCommit,url
+```
+
+3. Start the next Blargg bucket. The likely next target is durable CPU instruction ROM coverage:
 
 - run the aggregate `roms/cpu_instrs.gb`
 - run all committed individual ROMs in `roms/individual/01.gb` through `roms/individual/11.gb`
 - add a serial runner with timeout and RSS guard, similar to `tests/run_blargg_timing_suite.sh`
 
-5. If any individual CPU ROM fails:
+4. If any individual CPU ROM fails:
 
 - reproduce with a single-ROM command and a bounded cycle count
 - inspect the failing serial output or Blargg RAM result
 - fix the root cause in DMG or EigenScript, not by bypassing the test
 - only change EigenScript if the failure is a language/runtime bug
 
-6. Keep long emulator runs serial. Do not parallelize ROM stress runs on this machine; earlier memory pressure caused freezes.
+5. Keep long emulator runs serial. Do not parallelize ROM stress runs on this machine; earlier memory pressure caused freezes.
 
 ## Useful Commands
 
