@@ -116,24 +116,47 @@ define cpu_tick(cpu, mem, cycles) as:
     cpu.stepped_cycles += cycles
 
 define cpu_mem_read(cpu, mem, addr) as:
-    val is mem_read of [mem, addr]
-    cpu_tick of [cpu, mem, 4]
-    return val
+    cpu.stepped_cycles += 4
+    addr is addr & 0xFFFF
+    if addr < 0x4000:
+        if mem.rom_len > 0 and mem.mbc_type == 1 and mem.mbc1_mode == 1:
+            local bank0 is (mem.mbc1_bank2 & 0x03) << 5
+            if bank0 != 0:
+                return read_rom_bank of [mem, bank0, addr]
+        return mem.data[addr]
+    if addr < 0x8000:
+        if mem.mbc_type > 0 and mem.rom_len > 0:
+            local offset is addr - 0x4000
+            local rom_addr is (mem.rom_bank * 0x4000) + offset
+            if rom_addr >= 0 and rom_addr < mem.rom_len:
+                return mem.rom[rom_addr]
+            return read_rom_bank of [mem, mem.rom_bank, offset]
+        return mem.data[addr]
+    return mem_read of [mem, addr]
 
 define cpu_mem_write(cpu, mem, addr, val) as:
     mem_write of [mem, addr, val]
-    cpu_tick of [cpu, mem, 4]
+    cpu.stepped_cycles += 4
 
 define fetch8(cpu, mem) as:
-    val is cpu_mem_read of [cpu, mem, cpu.pc]
-    cpu.pc is (cpu.pc + 1) & 0xFFFF
-    return val
+    cpu.stepped_cycles += 4
+    local pc is cpu.pc
+    cpu.pc is (pc + 1) & 0xFFFF
+    if pc < 0x4000:
+        return mem.data[pc]
+    if pc < 0x8000:
+        if mem.mbc_type > 0 and mem.rom_len > 0:
+            local offset is pc - 0x4000
+            local rom_addr is (mem.rom_bank * 0x4000) + offset
+            if rom_addr >= 0 and rom_addr < mem.rom_len:
+                return mem.rom[rom_addr]
+            return read_rom_bank of [mem, mem.rom_bank, offset]
+        return mem.data[pc]
+    return mem_read of [mem, pc]
 
 define fetch16(cpu, mem) as:
-    lo is cpu_mem_read of [cpu, mem, cpu.pc]
-    cpu.pc is (cpu.pc + 1) & 0xFFFF
-    hi is cpu_mem_read of [cpu, mem, cpu.pc]
-    cpu.pc is (cpu.pc + 1) & 0xFFFF
+    lo is fetch8 of [cpu, mem]
+    hi is fetch8 of [cpu, mem]
     return hi << 8 | lo
 
 # ---- ALU operations ----
