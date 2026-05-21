@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build EigenScript
+        run: |
+          git clone https://github.com/InauguralSystems/EigenScript.git /tmp/eigenscript
+          cd /tmp/eigenscript && make build
+          echo "/tmp/eigenscript/src" >> $GITHUB_PATH
+
+      - name: Run CPU tests
+        run: eigenscript tests/test_cpu.eigs
+
+      - name: Run memory tests
+        run: eigenscript tests/test_memory.eigs
