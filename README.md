@@ -8,7 +8,7 @@ landed upstream because the emulator demanded it.
 ## Status
 
 Full SM83 CPU core (256 + 256 CB-prefix opcodes), 64KB memory bus with
-MBC1/MBC3 bank switching, timer/LCD/VBlank timing, interrupt handling,
+MBC1/MBC3/MBC5 ROM and cartridge RAM banking, timer/LCD/VBlank timing, interrupt handling,
 joypad input, and PPU rendering (background, window, sprites with priority).
 
 Runs in two modes:
@@ -28,6 +28,7 @@ iteration, sign extension, sort, and loop condition memory leak fixes.
 - `src/joypad.eigs` — Button state, FF00 register, interrupt on press
 - `dmg.eigs` — Main loop, timer, interrupts, graphical + headless modes
 - `tests/test_cpu.eigs` — 14 CPU unit tests
+- `tests/test_memory.eigs` — MBC1/MBC3/MBC5, cartridge RAM, echo RAM, and DMA tests
 
 ## Usage
 

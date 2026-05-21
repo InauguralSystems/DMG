@@ -116,258 +116,276 @@ define cpu_tick(cpu, mem, cycles) as:
     cpu.stepped_cycles += cycles
 
 define cpu_mem_read(cpu, mem, addr) as:
-    val is mem_read of [mem, addr]
-    cpu_tick of [cpu, mem, 4]
-    return val
+    cpu.stepped_cycles += 4
+    addr is addr & 0xFFFF
+    if addr < 0x4000:
+        if mem.rom_len > 0 and mem.mbc_type == 1 and mem.mbc1_mode == 1:
+            local bank0 is (mem.mbc1_bank2 & 0x03) << 5
+            if bank0 != 0:
+                return read_rom_bank of [mem, bank0, addr]
+        return mem.data[addr]
+    if addr < 0x8000:
+        if mem.mbc_type > 0 and mem.rom_len > 0:
+            local offset is addr - 0x4000
+            local rom_addr is (mem.rom_bank * 0x4000) + offset
+            if rom_addr >= 0 and rom_addr < mem.rom_len:
+                return mem.rom[rom_addr]
+            return read_rom_bank of [mem, mem.rom_bank, offset]
+        return mem.data[addr]
+    return mem_read of [mem, addr]
 
 define cpu_mem_write(cpu, mem, addr, val) as:
     mem_write of [mem, addr, val]
-    cpu_tick of [cpu, mem, 4]
+    cpu.stepped_cycles += 4
 
 define fetch8(cpu, mem) as:
-    val is cpu_mem_read of [cpu, mem, cpu.pc]
-    cpu.pc is (cpu.pc + 1) & 0xFFFF
-    return val
+    cpu.stepped_cycles += 4
+    local pc is cpu.pc
+    cpu.pc is (pc + 1) & 0xFFFF
+    if pc < 0x4000:
+        return mem.data[pc]
+    if pc < 0x8000:
+        if mem.mbc_type > 0 and mem.rom_len > 0:
+            local offset is pc - 0x4000
+            local rom_addr is (mem.rom_bank * 0x4000) + offset
+            if rom_addr >= 0 and rom_addr < mem.rom_len:
+                return mem.rom[rom_addr]
+            return read_rom_bank of [mem, mem.rom_bank, offset]
+        return mem.data[pc]
+    return mem_read of [mem, pc]
 
 define fetch16(cpu, mem) as:
-    lo is cpu_mem_read of [cpu, mem, cpu.pc]
-    cpu.pc is (cpu.pc + 1) & 0xFFFF
-    hi is cpu_mem_read of [cpu, mem, cpu.pc]
-    cpu.pc is (cpu.pc + 1) & 0xFFFF
+    lo is fetch8 of [cpu, mem]
+    hi is fetch8 of [cpu, mem]
     return hi << 8 | lo
 
 # ---- ALU operations ----
 
 define alu_add(cpu, val) as:
-    result is cpu.a + val
-    half is (cpu.a & 0x0F) + (val & 0x0F)
+    local result is cpu.a + val
+    local half is (cpu.a & 0x0F) + (val & 0x0F)
     cpu.a is result & 0xFF
-    z is 0
+    local f is 0
     if cpu.a == 0:
-        z is 1
-    h is 0
+        f |= FLAG_Z
     if half > 0x0F:
-        h is 1
-    c is 0
+        f |= FLAG_H
     if result > 0xFF:
-        c is 1
-    set_flags of [cpu, z, 0, h, c]
+        f |= FLAG_C
+    cpu.f is f
 
 define alu_adc(cpu, val) as:
-    carry is flag_c of cpu
-    result is cpu.a + val + carry
-    half is (cpu.a & 0x0F) + (val & 0x0F) + carry
+    local carry is 0
+    if (cpu.f & FLAG_C) != 0:
+        carry is 1
+    local result is cpu.a + val + carry
+    local half is (cpu.a & 0x0F) + (val & 0x0F) + carry
     cpu.a is result & 0xFF
-    z is 0
+    local f is 0
     if cpu.a == 0:
-        z is 1
-    h is 0
+        f |= FLAG_Z
     if half > 0x0F:
-        h is 1
-    c is 0
+        f |= FLAG_H
     if result > 0xFF:
-        c is 1
-    set_flags of [cpu, z, 0, h, c]
+        f |= FLAG_C
+    cpu.f is f
 
 define alu_sub(cpu, val) as:
-    result is cpu.a - val
-    half is (cpu.a & 0x0F) - (val & 0x0F)
+    local result is cpu.a - val
+    local half is (cpu.a & 0x0F) - (val & 0x0F)
     cpu.a is result & 0xFF
-    z is 0
+    local f is FLAG_N
     if cpu.a == 0:
-        z is 1
-    h is 0
+        f |= FLAG_Z
     if half < 0:
-        h is 1
-    c is 0
+        f |= FLAG_H
     if result < 0:
-        c is 1
-    set_flags of [cpu, z, 1, h, c]
+        f |= FLAG_C
+    cpu.f is f
 
 define alu_sbc(cpu, val) as:
-    carry is flag_c of cpu
-    result is cpu.a - val - carry
-    half is (cpu.a & 0x0F) - (val & 0x0F) - carry
+    local carry is 0
+    if (cpu.f & FLAG_C) != 0:
+        carry is 1
+    local result is cpu.a - val - carry
+    local half is (cpu.a & 0x0F) - (val & 0x0F) - carry
     cpu.a is result & 0xFF
-    z is 0
+    local f is FLAG_N
     if cpu.a == 0:
-        z is 1
-    h is 0
+        f |= FLAG_Z
     if half < 0:
-        h is 1
-    c is 0
+        f |= FLAG_H
     if result < 0:
-        c is 1
-    set_flags of [cpu, z, 1, h, c]
+        f |= FLAG_C
+    cpu.f is f
 
 define alu_and(cpu, val) as:
     cpu.a is cpu.a & val
-    z is 0
+    local f is FLAG_H
     if cpu.a == 0:
-        z is 1
-    set_flags of [cpu, z, 0, 1, 0]
+        f |= FLAG_Z
+    cpu.f is f
 
 define alu_xor(cpu, val) as:
     cpu.a is cpu.a ^ val
-    z is 0
     if cpu.a == 0:
-        z is 1
-    set_flags of [cpu, z, 0, 0, 0]
+        cpu.f is FLAG_Z
+    else:
+        cpu.f is 0
 
 define alu_or(cpu, val) as:
     cpu.a is cpu.a | val
-    z is 0
     if cpu.a == 0:
-        z is 1
-    set_flags of [cpu, z, 0, 0, 0]
+        cpu.f is FLAG_Z
+    else:
+        cpu.f is 0
 
 define alu_cp(cpu, val) as:
-    result is cpu.a - val
-    half is (cpu.a & 0x0F) - (val & 0x0F)
-    z is 0
+    local result is cpu.a - val
+    local half is (cpu.a & 0x0F) - (val & 0x0F)
+    local f is FLAG_N
     if (result & 0xFF) == 0:
-        z is 1
-    h is 0
+        f |= FLAG_Z
     if half < 0:
-        h is 1
-    c is 0
+        f |= FLAG_H
     if result < 0:
-        c is 1
-    set_flags of [cpu, z, 1, h, c]
+        f |= FLAG_C
+    cpu.f is f
 
 define alu_inc(cpu, val) as:
-    result is (val + 1) & 0xFF
-    z is 0
+    local result is (val + 1) & 0xFF
+    local f is cpu.f & FLAG_C
     if result == 0:
-        z is 1
-    h is 0
+        f |= FLAG_Z
     if (val & 0x0F) == 0x0F:
-        h is 1
-    # C flag preserved
-    cpu.f is cpu.f & FLAG_C
-    if z == 1:
-        cpu.f |= FLAG_Z
-    if h == 1:
-        cpu.f |= FLAG_H
+        f |= FLAG_H
+    cpu.f is f
     return result
 
 define alu_dec(cpu, val) as:
-    result is (val - 1) & 0xFF
-    z is 0
+    local result is (val - 1) & 0xFF
+    local f is (cpu.f & FLAG_C) | FLAG_N
     if result == 0:
-        z is 1
-    h is 0
+        f |= FLAG_Z
     if (val & 0x0F) == 0:
-        h is 1
-    cpu.f is (cpu.f & FLAG_C) | FLAG_N
-    if z == 1:
-        cpu.f |= FLAG_Z
-    if h == 1:
-        cpu.f |= FLAG_H
+        f |= FLAG_H
+    cpu.f is f
     return result
 
 # ---- 16-bit ADD HL ----
 
 define alu_add_hl(cpu, val) as:
-    hl is get_hl of cpu
-    result is hl + val
-    half is (hl & 0x0FFF) + (val & 0x0FFF)
-    set_hl of [cpu, result & 0xFFFF]
-    # Z flag preserved
-    z is flag_z of cpu
-    h is 0
+    local hl is (cpu.h << 8) | cpu.l
+    local result is hl + val
+    local half is (hl & 0x0FFF) + (val & 0x0FFF)
+    cpu.h is ((result >> 8) & 0xFF)
+    cpu.l is (result & 0xFF)
+    local f is cpu.f & FLAG_Z
     if half > 0x0FFF:
-        h is 1
-    c is 0
+        f |= FLAG_H
     if result > 0xFFFF:
-        c is 1
-    set_flags of [cpu, z, 0, h, c]
+        f |= FLAG_C
+    cpu.f is f
 
 # ---- Rotate/shift helpers ----
 
 define alu_rlc(cpu, val) as:
-    bit7 is val >> 7
-    result is ((val << 1) | bit7) & 0xFF
-    z is 0
+    local bit7 is val >> 7
+    local result is ((val << 1) | bit7) & 0xFF
+    local f is 0
     if result == 0:
-        z is 1
-    set_flags of [cpu, z, 0, 0, bit7]
+        f |= FLAG_Z
+    if bit7 != 0:
+        f |= FLAG_C
+    cpu.f is f
     return result
 
 define alu_rrc(cpu, val) as:
-    bit0 is val & 1
-    result is ((val >> 1) | (bit0 << 7)) & 0xFF
-    z is 0
+    local bit0 is val & 1
+    local result is ((val >> 1) | (bit0 << 7)) & 0xFF
+    local f is 0
     if result == 0:
-        z is 1
-    set_flags of [cpu, z, 0, 0, bit0]
+        f |= FLAG_Z
+    if bit0 != 0:
+        f |= FLAG_C
+    cpu.f is f
     return result
 
 define alu_rl(cpu, val) as:
-    old_c is flag_c of cpu
-    bit7 is val >> 7
-    result is ((val << 1) | old_c) & 0xFF
-    z is 0
+    local old_c is 0
+    if (cpu.f & FLAG_C) != 0:
+        old_c is 1
+    local bit7 is val >> 7
+    local result is ((val << 1) | old_c) & 0xFF
+    local f is 0
     if result == 0:
-        z is 1
-    set_flags of [cpu, z, 0, 0, bit7]
+        f |= FLAG_Z
+    if bit7 != 0:
+        f |= FLAG_C
+    cpu.f is f
     return result
 
 define alu_rr(cpu, val) as:
-    old_c is flag_c of cpu
-    bit0 is val & 1
-    result is ((val >> 1) | (old_c << 7)) & 0xFF
-    z is 0
+    local old_c is 0
+    if (cpu.f & FLAG_C) != 0:
+        old_c is 1
+    local bit0 is val & 1
+    local result is ((val >> 1) | (old_c << 7)) & 0xFF
+    local f is 0
     if result == 0:
-        z is 1
-    set_flags of [cpu, z, 0, 0, bit0]
+        f |= FLAG_Z
+    if bit0 != 0:
+        f |= FLAG_C
+    cpu.f is f
     return result
 
 define alu_sla(cpu, val) as:
-    bit7 is val >> 7
-    result is (val << 1) & 0xFF
-    z is 0
+    local bit7 is val >> 7
+    local result is (val << 1) & 0xFF
+    local f is 0
     if result == 0:
-        z is 1
-    set_flags of [cpu, z, 0, 0, bit7]
+        f |= FLAG_Z
+    if bit7 != 0:
+        f |= FLAG_C
+    cpu.f is f
     return result
 
 define alu_sra(cpu, val) as:
-    bit0 is val & 1
-    bit7 is val & 0x80
-    result is ((val >> 1) | bit7) & 0xFF
-    z is 0
+    local bit0 is val & 1
+    local bit7 is val & 0x80
+    local result is ((val >> 1) | bit7) & 0xFF
+    local f is 0
     if result == 0:
-        z is 1
-    set_flags of [cpu, z, 0, 0, bit0]
+        f |= FLAG_Z
+    if bit0 != 0:
+        f |= FLAG_C
+    cpu.f is f
     return result
 
 define alu_swap(cpu, val) as:
-    result is (val >> 4) | ((val << 4) & 0xF0)
-    z is 0
+    local result is (val >> 4) | ((val << 4) & 0xF0)
     if result == 0:
-        z is 1
-    set_flags of [cpu, z, 0, 0, 0]
+        cpu.f is FLAG_Z
+    else:
+        cpu.f is 0
     return result
 
 define alu_srl(cpu, val) as:
-    bit0 is val & 1
-    result is val >> 1
-    z is 0
+    local bit0 is val & 1
+    local result is val >> 1
+    local f is 0
     if result == 0:
-        z is 1
-    set_flags of [cpu, z, 0, 0, bit0]
+        f |= FLAG_Z
+    if bit0 != 0:
+        f |= FLAG_C
+    cpu.f is f
     return result
 
 define alu_bit(cpu, bit, val) as:
-    mask is 1 << bit
-    z is 0
-    if (val & mask) == 0:
-        z is 1
-    # N=0, H=1, C preserved
-    cpu.f is (cpu.f & FLAG_C) | FLAG_H
-    if z == 1:
-        cpu.f |= FLAG_Z
+    local f is (cpu.f & FLAG_C) | FLAG_H
+    if (val & (1 << bit)) == 0:
+        f |= FLAG_Z
+    cpu.f is f
 
 define alu_set(bit, val) as:
     return val | (1 << bit)

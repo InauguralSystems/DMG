@@ -20,9 +20,24 @@ DMG `master` also includes PR #6:
 - Added `tests/run_blargg_timing_suite.sh`.
 - Added README documentation for the Blargg timing-suite command.
 
+DMG `master` also includes PR #8:
+
+- PR: https://github.com/InauguralSystems/DMG/pull/8
+- Merge commit: `99ef673`
+- Added `tests/run_blargg_cpu_instrs_suite.sh`.
+- Verified aggregate and individual Blargg CPU instruction ROM coverage.
+
+Current branch adds memory/MBC durability:
+
+- MBC1 high ROM bits, RAM banking mode, and cartridge RAM storage.
+- MBC3 cartridge RAM banking.
+- MBC5 9-bit ROM banking and RAM bank selection.
+- Blargg RAM-result reporting now reads through the memory bus, so MBC cartridge RAM results are visible.
+- New `tests/test_memory.eigs` regression suite.
+
 Current local DMG note:
 
-- This handoff file is a follow-up documentation commit.
+- This branch is memory/MBC follow-up work after PR #8.
 - Status: clean except local-only untracked ROM/profiler files:
   - `roms/pokemon-red.gb`
   - `roms/Pokemon - Red Version (USA, Europe) (SGB Enhanced).gb`
@@ -30,10 +45,9 @@ Current local DMG note:
 
 Current EigenScript note:
 
-- EigenScript still has a separate draft PR open for AST identifier hash caching:
-  https://github.com/InauguralSystems/EigenScript/pull/114
-- Local EigenScript `main` has an unrelated `Makefile` edit and is ahead/behind `org/main`.
-- Do not touch EigenScript unless the next DMG run exposes a root language/runtime issue.
+- Use `/home/jon/EigenScript/src/eigenscript` for current-root validation.
+- Local EigenScript `main` may still have the intentional local `Makefile` edit.
+- Do not touch EigenScript unless a DMG run exposes a root language/runtime issue.
 
 ## Validation Already Completed
 
@@ -51,7 +65,7 @@ Passed with local `roms/pokemon-red.gb`:
 - final PC: `20863`
 - render peak: `nonzero=12325 unique=4`
 - final render hash: `680870503`
-- peak RSS: `18816 KB`
+- peak RSS: `19456 KB`
 
 Bounded gfx smoke:
 
@@ -78,7 +92,7 @@ Passed:
 - `mem_timing`, cycles `7000008`
 - `mem_timing_2`, cycles `12000004`
 - `interrupt_time`, cycles `3000000`
-- peak RSS: `10752 KB`
+- peak RSS: `11136 KB`
 
 Blargg CPU instruction aggregate:
 
@@ -89,7 +103,7 @@ BLARGG_CPU_INSTRS_MODE=aggregate tests/run_blargg_cpu_instrs_suite.sh
 Passed:
 
 - `cpu_instrs`, cycles `225000004`
-- peak RSS: `10624 KB`
+- peak RSS: `11008 KB`
 
 CPU tests:
 
@@ -98,6 +112,20 @@ CPU tests:
 ```
 
 Passed all CPU unit tests.
+
+Memory/MBC tests:
+
+```bash
+/home/jon/EigenScript/src/eigenscript tests/test_memory.eigs
+```
+
+Passed:
+
+- MBC1 ROM low/high bits and RAM banking mode
+- MBC1 cartridge RAM enable/bank preservation
+- MBC3 cartridge RAM banking
+- MBC5 9-bit ROM banking and RAM bank 15 preservation
+- Echo RAM and DMA transfer
 
 New CPU instruction suite runner:
 
@@ -129,23 +157,23 @@ git merge --ff-only origin/master
 gh pr view 6 --json state,mergedAt,mergeCommit,url
 ```
 
-3. Run the next Blargg bucket. The durable CPU instruction ROM coverage now has a runner:
+3. Run the memory/MBC regression suite after any memory-bus edit:
 
 ```bash
-tests/run_blargg_cpu_instrs_suite.sh
+/home/jon/EigenScript/src/eigenscript tests/test_memory.eigs
 ```
 
-It runs the aggregate `roms/cpu_instrs.gb` and all committed individual ROMs in
-`roms/individual/01.gb` through `roms/individual/11.gb`.
+Then run `tests/run_blargg_timing_suite.sh` because the Blargg RAM-result path
+depends on cartridge RAM visibility.
 
-4. If any individual CPU ROM fails:
+4. If any CPU or memory ROM fails:
 
 - reproduce with a single-ROM command and a bounded cycle count
 - inspect the failing serial output or Blargg RAM result
 - fix the root cause in DMG or EigenScript, not by bypassing the test
 - only change EigenScript if the failure is a language/runtime bug
 
-5. Keep long emulator runs serial. Do not parallelize ROM stress runs on this machine; earlier memory pressure caused freezes.
+5. Next high-signal target after this branch: save/RAM persistence and PPU/OAM edge-case regressions. Keep long emulator runs serial; earlier memory pressure caused freezes.
 
 ## Useful Commands
 
@@ -171,6 +199,12 @@ CPU instruction suite:
 
 ```bash
 tests/run_blargg_cpu_instrs_suite.sh
+```
+
+Memory/MBC unit tests:
+
+```bash
+/home/jon/EigenScript/src/eigenscript tests/test_memory.eigs
 ```
 
 Gfx smoke:
