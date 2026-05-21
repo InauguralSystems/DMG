@@ -1,0 +1,17 @@
+# Profiler output
+massif.out.*
+gmon.out
+
+# Commercial ROMs (not distributed)
+roms/pokemon*.gb
+roms/Pokemon*.gb
+
+# Build/editor artifacts
+*.o
+*.swp
+*~
+.DS_Store
+
+# Agent/tool metadata
+.agents/
+.codex/
