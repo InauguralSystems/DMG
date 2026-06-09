@@ -35,7 +35,10 @@ define new_memory() as:
         "apu_ch2_cycles": 0,
         "ie": 0,
         "if_reg": 0,
-        "joypad": null
+        "joypad": null,
+        "div_counter": 0,
+        "timer_counter": 0,
+        "tima_reload_pending": 0
     }
 
 define rom_bank_count(mem) as:
@@ -289,6 +292,33 @@ define mem_write(mem, addr, val) as:
     # IF register
     if addr == 0xFF0F:
         mem.if_reg is val & 0x1F
+        return null
+
+    # DIV register — any CPU write resets DIV to 0 and the internal divider
+    if addr == 0xFF04:
+        mem.data[0xFF04] is 0
+        mem.div_counter is 0
+        return null
+
+    # TIMA write — if in reload-pending window, cancel the pending reload
+    if addr == 0xFF05:
+        if mem.tima_reload_pending > 0:
+            mem.tima_reload_pending is 0
+        mem.data[0xFF05] is val
+        return null
+
+    # TMA write
+    if addr == 0xFF06:
+        mem.data[0xFF06] is val
+        return null
+
+    # TAC register — frequency/enable bit changes reset the timer divider so
+    # stale counter accumulation doesn't carry across rate changes.
+    if addr == 0xFF07:
+        old is mem.data[0xFF07]
+        if ((old ^ val) & 0x07) != 0:
+            mem.timer_counter is 0
+        mem.data[0xFF07] is val & 0x07
         return null
 
     # Serial port (0xFF01/0xFF02) — capture output for Blargg test ROMs
