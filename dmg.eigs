@@ -381,11 +381,61 @@ define run_headless_loop(cpu, mem, max_cycles, input_events, total_cycles_in) as
         if cpu.stopped == 1:
             break
 
-        cycles is exec_op of [cpu, mem]
+        # Inlined exec_op — saves one function call per instruction.
+        cpu.stepped_cycles is 0
+        if cpu.halt_bug == 1:
+            cpu.halt_bug is 0
+            op is cpu_mem_read of [cpu, mem, cpu.pc]
+        else:
+            op is fetch8 of [cpu, mem]
+        _exec_ctx[2] is op
+        cycles is dispatch of [_op_table, op, _exec_ctx]
+        if cpu.ime_delay > 0:
+            cpu.ime_delay -= 1
+            if cpu.ime_delay == 0:
+                cpu.ime is 1
         tc += cycles
 
-        mem.pending_cycles is cycles - cpu.stepped_cycles
-        bus_flush of [cpu, mem]
+        # Inlined post-instruction bus flush (was bus_flush call). The function
+        # call overhead is measurable here — this site fires once per instruction.
+        local pc is cycles - cpu.stepped_cycles
+        if pc > 0:
+            cpu.stepped_cycles += pc
+            mem.pending_cycles is 0
+            mem.div_counter += pc
+            if mem.div_counter >= 256:
+                mem.data[TIMER_DIV] is (mem.data[TIMER_DIV] + floor of (mem.div_counter / 256)) & 0xFF
+                mem.div_counter is mem.div_counter % 256
+            if mem.tima_reload_pending > 0:
+                mem.tima_reload_pending -= pc
+                if mem.tima_reload_pending <= 0:
+                    mem.data[TIMER_TIMA] is mem.data[TIMER_TMA]
+                    mem.if_reg |= 0x04
+                    mem.tima_reload_pending is 0
+            tac_p is mem.data[TIMER_TAC]
+            if (tac_p & 0x04) != 0:
+                threshold_p is _tac_thresholds[tac_p & 0x03]
+                mem.timer_counter += pc
+                loop while mem.timer_counter >= threshold_p:
+                    mem.timer_counter -= threshold_p
+                    tima_p is mem.data[TIMER_TIMA] + 1
+                    if tima_p > 0xFF:
+                        mem.data[TIMER_TIMA] is 0
+                        mem.tima_reload_pending is 4
+                    else:
+                        mem.data[TIMER_TIMA] is tima_p
+            _scanline_counter += pc
+            if _scanline_counter >= CYCLES_PER_LINE:
+                _scanline_counter -= CYCLES_PER_LINE
+                ly_p is mem.data[0xFF44] + 1
+                if ly_p >= LINES_PER_FRAME:
+                    ly_p is 0
+                mem.data[0xFF44] is ly_p
+                if ly_p == VBLANK_START_LINE:
+                    mem.if_reg |= 0x01
+            if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
+                apu_step of [mem, pc]
+
         int_cycles is handle_interrupts of [cpu, mem]
         if int_cycles > 0:
             mem.pending_cycles is int_cycles - cpu.stepped_cycles
@@ -417,6 +467,7 @@ define run_headless_loop(cpu, mem, max_cycles, input_events, total_cycles_in) as
 cpu is new_cpu of null
 mem is new_memory of null
 cpu_reset of cpu
+init_exec_ctx of [cpu, mem]
 
 loaded is load_rom of [mem, rom_path]
 assert of [loaded == 1, f"Failed to load ROM: {rom_path}"]
@@ -492,11 +543,59 @@ if gfx_mode == 1:
             if cpu.stopped == 1:
                 break
 
-            cycles is exec_op of [cpu, mem]
+            # Inlined exec_op + post-instruction bus flush (matches headless loop).
+            cpu.stepped_cycles is 0
+            if cpu.halt_bug == 1:
+                cpu.halt_bug is 0
+                op is cpu_mem_read of [cpu, mem, cpu.pc]
+            else:
+                op is fetch8 of [cpu, mem]
+            _exec_ctx[2] is op
+            cycles is dispatch of [_op_table, op, _exec_ctx]
+            if cpu.ime_delay > 0:
+                cpu.ime_delay -= 1
+                if cpu.ime_delay == 0:
+                    cpu.ime is 1
             frame_cycles += cycles
 
-            mem.pending_cycles is cycles - cpu.stepped_cycles
-            bus_flush of [cpu, mem]
+            local pc is cycles - cpu.stepped_cycles
+            if pc > 0:
+                cpu.stepped_cycles += pc
+                mem.pending_cycles is 0
+                mem.div_counter += pc
+                if mem.div_counter >= 256:
+                    mem.data[TIMER_DIV] is (mem.data[TIMER_DIV] + floor of (mem.div_counter / 256)) & 0xFF
+                    mem.div_counter is mem.div_counter % 256
+                if mem.tima_reload_pending > 0:
+                    mem.tima_reload_pending -= pc
+                    if mem.tima_reload_pending <= 0:
+                        mem.data[TIMER_TIMA] is mem.data[TIMER_TMA]
+                        mem.if_reg |= 0x04
+                        mem.tima_reload_pending is 0
+                tac_p is mem.data[TIMER_TAC]
+                if (tac_p & 0x04) != 0:
+                    threshold_p is _tac_thresholds[tac_p & 0x03]
+                    mem.timer_counter += pc
+                    loop while mem.timer_counter >= threshold_p:
+                        mem.timer_counter -= threshold_p
+                        tima_p is mem.data[TIMER_TIMA] + 1
+                        if tima_p > 0xFF:
+                            mem.data[TIMER_TIMA] is 0
+                            mem.tima_reload_pending is 4
+                        else:
+                            mem.data[TIMER_TIMA] is tima_p
+                _scanline_counter += pc
+                if _scanline_counter >= CYCLES_PER_LINE:
+                    _scanline_counter -= CYCLES_PER_LINE
+                    ly_p is mem.data[0xFF44] + 1
+                    if ly_p >= LINES_PER_FRAME:
+                        ly_p is 0
+                    mem.data[0xFF44] is ly_p
+                    if ly_p == VBLANK_START_LINE:
+                        mem.if_reg |= 0x01
+                if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
+                    apu_step of [mem, pc]
+
             int_cycles is handle_interrupts of [cpu, mem]
             if int_cycles > 0:
                 mem.pending_cycles is int_cycles - cpu.stepped_cycles

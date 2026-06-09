@@ -798,6 +798,12 @@ _op_table[0xFF] is _op_rst_38
 
 _exec_ctx is [null, null, 0]
 
+# Called once at startup so the cpu/mem slots are stable; exec_op only
+# updates the opcode slot per call.
+define init_exec_ctx(cpu, mem) as:
+    _exec_ctx[0] is cpu
+    _exec_ctx[1] is mem
+
 define exec_op(cpu, mem) as:
     cpu.stepped_cycles is 0
     if cpu.halt_bug == 1:
@@ -805,8 +811,6 @@ define exec_op(cpu, mem) as:
         op is cpu_mem_read of [cpu, mem, cpu.pc]
     else:
         op is fetch8 of [cpu, mem]
-    _exec_ctx[0] is cpu
-    _exec_ctx[1] is mem
     _exec_ctx[2] is op
     cycles is dispatch of [_op_table, op, _exec_ctx]
     if cpu.ime_delay > 0:
