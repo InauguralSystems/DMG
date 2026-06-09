@@ -38,7 +38,8 @@ define new_memory() as:
         "joypad": null,
         "div_counter": 0,
         "timer_counter": 0,
-        "tima_reload_pending": 0
+        "tima_reload_pending": 0,
+        "pending_cycles": 0
     }
 
 define rom_bank_count(mem) as:

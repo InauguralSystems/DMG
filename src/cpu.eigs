@@ -113,16 +113,14 @@ define set_flags(cpu, z, n, h, c) as:
 # ---- Fetch helpers ----
 #
 # Every memory access (opcode fetch, operand fetch, bus read/write) takes
-# one M-cycle = 4 T-cycles. We tick timer/lcd/apu BEFORE the access so the
-# bus observation reflects state at the end of the preceding M-cycle —
-# this is what Blargg's mem_timing suite measures.
+# one M-cycle = 4 T-cycles. To stay cycle-accurate for Blargg's mem_timing
+# without paying a per-access timer_step+lcd_step call, we accumulate the
+# cycles in mem.pending_cycles and only flush before MMIO/IE observation
+# (addr >= 0xFF00) and at the end of each instruction. ROM/VRAM/WRAM reads
+# don't observe bus state, so deferring is safe.
 
 define cpu_mem_read(cpu, mem, addr) as:
-    timer_step of [mem, 4]
-    lcd_step of [mem, 4]
-    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-        apu_step of [mem, 4]
-    cpu.stepped_cycles += 4
+    mem.pending_cycles += 4
     addr is addr & 0xFFFF
     if addr < 0x4000:
         if mem.rom_len > 0 and mem.mbc_type == 1 and mem.mbc1_mode == 1:
@@ -138,22 +136,19 @@ define cpu_mem_read(cpu, mem, addr) as:
                 return mem.rom[rom_addr]
             return read_rom_bank of [mem, mem.rom_bank, offset]
         return mem.data[addr]
+    if addr >= 0xFF00:
+        bus_flush of [cpu, mem]
     return mem_read of [mem, addr]
 
 define cpu_mem_write(cpu, mem, addr, val) as:
-    timer_step of [mem, 4]
-    lcd_step of [mem, 4]
-    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-        apu_step of [mem, 4]
-    cpu.stepped_cycles += 4
+    mem.pending_cycles += 4
+    addr is addr & 0xFFFF
+    if addr >= 0xFF00:
+        bus_flush of [cpu, mem]
     mem_write of [mem, addr, val]
 
 define fetch8(cpu, mem) as:
-    timer_step of [mem, 4]
-    lcd_step of [mem, 4]
-    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-        apu_step of [mem, 4]
-    cpu.stepped_cycles += 4
+    mem.pending_cycles += 4
     local pc is cpu.pc
     cpu.pc is (pc + 1) & 0xFFFF
     if pc < 0x4000:
@@ -166,6 +161,8 @@ define fetch8(cpu, mem) as:
                 return mem.rom[rom_addr]
             return read_rom_bank of [mem, mem.rom_bank, offset]
         return mem.data[pc]
+    if pc >= 0xFF00:
+        bus_flush of [cpu, mem]
     return mem_read of [mem, pc]
 
 define fetch16(cpu, mem) as:

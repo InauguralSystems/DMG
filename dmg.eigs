@@ -95,6 +95,58 @@ define apu_step(mem, cycles) as:
         if mem.apu_ch2_cycles < 0:
             mem.apu_ch2_cycles is 0
 
+# Drain accumulated bus cycles into timer/lcd/apu. Called before any MMIO
+# observation and at the end of every instruction. Keeping per-access ticking
+# deferred saves ~2 function calls × N memory accesses per opcode — RAM/ROM
+# reads don't observe bus state so they don't need an immediate tick.
+# timer_step + lcd_step are inlined here to avoid 2 function calls per flush;
+# their fast paths (TAC disabled, scanline not crossed) are taken nearly every
+# time so the inline body stays cheap.
+define bus_flush(cpu, mem) as:
+    cycles is mem.pending_cycles
+    if cycles <= 0:
+        return null
+    mem.pending_cycles is 0
+    cpu.stepped_cycles += cycles
+
+    # --- inline timer_step ---
+    mem.div_counter += cycles
+    if mem.div_counter >= 256:
+        mem.data[TIMER_DIV] is (mem.data[TIMER_DIV] + floor of (mem.div_counter / 256)) & 0xFF
+        mem.div_counter is mem.div_counter % 256
+    if mem.tima_reload_pending > 0:
+        mem.tima_reload_pending -= cycles
+        if mem.tima_reload_pending <= 0:
+            mem.data[TIMER_TIMA] is mem.data[TIMER_TMA]
+            mem.if_reg |= 0x04
+            mem.tima_reload_pending is 0
+    tac is mem.data[TIMER_TAC]
+    if (tac & 0x04) != 0:
+        threshold is _tac_thresholds[tac & 0x03]
+        mem.timer_counter += cycles
+        loop while mem.timer_counter >= threshold:
+            mem.timer_counter -= threshold
+            tima is mem.data[TIMER_TIMA] + 1
+            if tima > 0xFF:
+                mem.data[TIMER_TIMA] is 0
+                mem.tima_reload_pending is 4
+            else:
+                mem.data[TIMER_TIMA] is tima
+
+    # --- inline lcd_step ---
+    _scanline_counter += cycles
+    if _scanline_counter >= CYCLES_PER_LINE:
+        _scanline_counter -= CYCLES_PER_LINE
+        ly is mem.data[0xFF44] + 1
+        if ly >= LINES_PER_FRAME:
+            ly is 0
+        mem.data[0xFF44] is ly
+        if ly == VBLANK_START_LINE:
+            mem.if_reg |= 0x01
+
+    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
+        apu_step of [mem, cycles]
+
 # ============================================================
 # Interrupt handling
 # ============================================================
@@ -316,19 +368,13 @@ define run_headless_loop(cpu, mem, max_cycles, input_events, total_cycles_in) as
                     skip is cyc_to_timer_int
             if skip < 4:
                 skip is 4
-            timer_step of [mem, skip]
-            lcd_step of [mem, skip]
-            if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                apu_step of [mem, skip]
+            mem.pending_cycles += skip
+            bus_flush of [cpu, mem]
             tc += skip
             int_cycles is handle_interrupts of [cpu, mem]
             if int_cycles > 0:
-                remaining_int_cycles is int_cycles - cpu.stepped_cycles
-                if remaining_int_cycles > 0:
-                    timer_step of [mem, remaining_int_cycles]
-                    lcd_step of [mem, remaining_int_cycles]
-                    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                        apu_step of [mem, remaining_int_cycles]
+                mem.pending_cycles is int_cycles - cpu.stepped_cycles
+                bus_flush of [cpu, mem]
             tc += int_cycles
             continue
 
@@ -338,20 +384,12 @@ define run_headless_loop(cpu, mem, max_cycles, input_events, total_cycles_in) as
         cycles is exec_op of [cpu, mem]
         tc += cycles
 
-        remaining_cycles is cycles - cpu.stepped_cycles
-        if remaining_cycles > 0:
-            timer_step of [mem, remaining_cycles]
-            lcd_step of [mem, remaining_cycles]
-            if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                apu_step of [mem, remaining_cycles]
+        mem.pending_cycles is cycles - cpu.stepped_cycles
+        bus_flush of [cpu, mem]
         int_cycles is handle_interrupts of [cpu, mem]
         if int_cycles > 0:
-            remaining_int_cycles is int_cycles - cpu.stepped_cycles
-            if remaining_int_cycles > 0:
-                timer_step of [mem, remaining_int_cycles]
-                lcd_step of [mem, remaining_int_cycles]
-                if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                    apu_step of [mem, remaining_int_cycles]
+            mem.pending_cycles is int_cycles - cpu.stepped_cycles
+            bus_flush of [cpu, mem]
         tc += int_cycles
 
         if tc % 1000000 < 100:
@@ -441,19 +479,13 @@ if gfx_mode == 1:
                 skip is CYCLES_PER_LINE - _scanline_counter
                 if skip < 4:
                     skip is 4
-                timer_step of [mem, skip]
-                lcd_step of [mem, skip]
-                if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                    apu_step of [mem, skip]
+                mem.pending_cycles += skip
+                bus_flush of [cpu, mem]
                 frame_cycles += skip
                 int_cycles is handle_interrupts of [cpu, mem]
                 if int_cycles > 0:
-                    remaining_int_cycles is int_cycles - cpu.stepped_cycles
-                    if remaining_int_cycles > 0:
-                        timer_step of [mem, remaining_int_cycles]
-                        lcd_step of [mem, remaining_int_cycles]
-                        if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                            apu_step of [mem, remaining_int_cycles]
+                    mem.pending_cycles is int_cycles - cpu.stepped_cycles
+                    bus_flush of [cpu, mem]
                 frame_cycles += int_cycles
                 continue
 
@@ -463,20 +495,12 @@ if gfx_mode == 1:
             cycles is exec_op of [cpu, mem]
             frame_cycles += cycles
 
-            remaining_cycles is cycles - cpu.stepped_cycles
-            if remaining_cycles > 0:
-                timer_step of [mem, remaining_cycles]
-                lcd_step of [mem, remaining_cycles]
-                if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                    apu_step of [mem, remaining_cycles]
+            mem.pending_cycles is cycles - cpu.stepped_cycles
+            bus_flush of [cpu, mem]
             int_cycles is handle_interrupts of [cpu, mem]
             if int_cycles > 0:
-                remaining_int_cycles is int_cycles - cpu.stepped_cycles
-                if remaining_int_cycles > 0:
-                    timer_step of [mem, remaining_int_cycles]
-                    lcd_step of [mem, remaining_int_cycles]
-                    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                        apu_step of [mem, remaining_int_cycles]
+                mem.pending_cycles is int_cycles - cpu.stepped_cycles
+                bus_flush of [cpu, mem]
             frame_cycles += int_cycles
 
         total_cycles += frame_cycles
