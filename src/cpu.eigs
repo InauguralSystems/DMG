@@ -111,11 +111,17 @@ define set_flags(cpu, z, n, h, c) as:
     cpu.f is f
 
 # ---- Fetch helpers ----
-
-define cpu_tick(cpu, mem, cycles) as:
-    cpu.stepped_cycles += cycles
+#
+# Every memory access (opcode fetch, operand fetch, bus read/write) takes
+# one M-cycle = 4 T-cycles. We tick timer/lcd/apu BEFORE the access so the
+# bus observation reflects state at the end of the preceding M-cycle —
+# this is what Blargg's mem_timing suite measures.
 
 define cpu_mem_read(cpu, mem, addr) as:
+    timer_step of [mem, 4]
+    lcd_step of [mem, 4]
+    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
+        apu_step of [mem, 4]
     cpu.stepped_cycles += 4
     addr is addr & 0xFFFF
     if addr < 0x4000:
@@ -135,10 +141,18 @@ define cpu_mem_read(cpu, mem, addr) as:
     return mem_read of [mem, addr]
 
 define cpu_mem_write(cpu, mem, addr, val) as:
-    mem_write of [mem, addr, val]
+    timer_step of [mem, 4]
+    lcd_step of [mem, 4]
+    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
+        apu_step of [mem, 4]
     cpu.stepped_cycles += 4
+    mem_write of [mem, addr, val]
 
 define fetch8(cpu, mem) as:
+    timer_step of [mem, 4]
+    lcd_step of [mem, 4]
+    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
+        apu_step of [mem, 4]
     cpu.stepped_cycles += 4
     local pc is cpu.pc
     cpu.pc is (pc + 1) & 0xFFFF

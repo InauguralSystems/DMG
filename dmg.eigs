@@ -95,13 +95,6 @@ define apu_step(mem, cycles) as:
         if mem.apu_ch2_cycles < 0:
             mem.apu_ch2_cycles is 0
 
-define cpu_tick(cpu, mem, cycles) as:
-    timer_step of [mem, cycles]
-    lcd_step of [mem, cycles]
-    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-        apu_step of [mem, cycles]
-    cpu.stepped_cycles += cycles
-
 # ============================================================
 # Interrupt handling
 # ============================================================
@@ -330,10 +323,12 @@ define run_headless_loop(cpu, mem, max_cycles, input_events, total_cycles_in) as
             tc += skip
             int_cycles is handle_interrupts of [cpu, mem]
             if int_cycles > 0:
-                timer_step of [mem, int_cycles]
-                lcd_step of [mem, int_cycles]
-                if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                    apu_step of [mem, int_cycles]
+                remaining_int_cycles is int_cycles - cpu.stepped_cycles
+                if remaining_int_cycles > 0:
+                    timer_step of [mem, remaining_int_cycles]
+                    lcd_step of [mem, remaining_int_cycles]
+                    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
+                        apu_step of [mem, remaining_int_cycles]
             tc += int_cycles
             continue
 
@@ -343,17 +338,20 @@ define run_headless_loop(cpu, mem, max_cycles, input_events, total_cycles_in) as
         cycles is exec_op of [cpu, mem]
         tc += cycles
 
-        if cycles > 0:
-            timer_step of [mem, cycles]
-            lcd_step of [mem, cycles]
+        remaining_cycles is cycles - cpu.stepped_cycles
+        if remaining_cycles > 0:
+            timer_step of [mem, remaining_cycles]
+            lcd_step of [mem, remaining_cycles]
             if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                apu_step of [mem, cycles]
+                apu_step of [mem, remaining_cycles]
         int_cycles is handle_interrupts of [cpu, mem]
         if int_cycles > 0:
-            timer_step of [mem, int_cycles]
-            lcd_step of [mem, int_cycles]
-            if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                apu_step of [mem, int_cycles]
+            remaining_int_cycles is int_cycles - cpu.stepped_cycles
+            if remaining_int_cycles > 0:
+                timer_step of [mem, remaining_int_cycles]
+                lcd_step of [mem, remaining_int_cycles]
+                if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
+                    apu_step of [mem, remaining_int_cycles]
         tc += int_cycles
 
         if tc % 1000000 < 100:
@@ -450,10 +448,12 @@ if gfx_mode == 1:
                 frame_cycles += skip
                 int_cycles is handle_interrupts of [cpu, mem]
                 if int_cycles > 0:
-                    timer_step of [mem, int_cycles]
-                    lcd_step of [mem, int_cycles]
-                    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                        apu_step of [mem, int_cycles]
+                    remaining_int_cycles is int_cycles - cpu.stepped_cycles
+                    if remaining_int_cycles > 0:
+                        timer_step of [mem, remaining_int_cycles]
+                        lcd_step of [mem, remaining_int_cycles]
+                        if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
+                            apu_step of [mem, remaining_int_cycles]
                 frame_cycles += int_cycles
                 continue
 
@@ -463,17 +463,20 @@ if gfx_mode == 1:
             cycles is exec_op of [cpu, mem]
             frame_cycles += cycles
 
-            if cycles > 0:
-                timer_step of [mem, cycles]
-                lcd_step of [mem, cycles]
+            remaining_cycles is cycles - cpu.stepped_cycles
+            if remaining_cycles > 0:
+                timer_step of [mem, remaining_cycles]
+                lcd_step of [mem, remaining_cycles]
                 if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                    apu_step of [mem, cycles]
+                    apu_step of [mem, remaining_cycles]
             int_cycles is handle_interrupts of [cpu, mem]
             if int_cycles > 0:
-                timer_step of [mem, int_cycles]
-                lcd_step of [mem, int_cycles]
-                if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                    apu_step of [mem, int_cycles]
+                remaining_int_cycles is int_cycles - cpu.stepped_cycles
+                if remaining_int_cycles > 0:
+                    timer_step of [mem, remaining_int_cycles]
+                    lcd_step of [mem, remaining_int_cycles]
+                    if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
+                        apu_step of [mem, remaining_int_cycles]
             frame_cycles += int_cycles
 
         total_cycles += frame_cycles
