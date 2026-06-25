@@ -85,3 +85,37 @@ absolute floor is hardware-bound.
 
 Raw run logs were not persisted; re-running is cheap (~30 sec
 canary, ~5 min full).
+
+## Cloud devcontainer baseline — 2026-06-25 (EigenScript v0.18.0)
+
+Captured in the reproducible devcontainer (`.devcontainer/`, EigenScript
+pinned `v0.18.0`) on a GitHub-hosted cloud runner — **the same image a
+Codespace opens**. Different host from the T3200 above: a trend number for
+the cloud/Codespace target, **not comparable to the T3200 figures as a
+runtime delta** (per the no-cross-host-comparison rule).
+
+Host: **AMD EPYC 7763** (Zen 3 server), **2 vCPU** allocated — the default
+GitHub Actions runner / basic Codespace SKU. DMG emulation is
+single-threaded, so only per-core speed matters; a larger Codespace machine
+type adds cores/RAM, not canary MHz.
+
+### Headline canary: cpu_instrs.gb, 500K cycles, n=5
+
+| variant | n | MHz (median) | range |
+|---|---|---|---|
+| JIT-on (default) | 5 | **5.22** | 4.36 – 5.46 |
+
+Runs: 5.22, 5.22, 5.46, 4.36, 5.44 (mean 5.14). The 4.36 is a shared-cloud
+noisy-neighbor dip; the warm cluster is 5.22–5.46 (~4.6%).
+
+**Above real Game Boy speed (4.19 MHz) — ~1.25× real-time.** The
+interpreted/JIT VM emulates a DMG *faster than the original hardware* in the
+cloud. For cross-host context only (NOT a runtime trend): ~4.7× the T3200
+v0.12.0 canary (1.101 MHz) and ~4.3× the local N3350 Goldmont dev box
+measured the same day (1.21 MHz median, v0.18.0). Consistent with the
+"~5 MHz cpu_instrs on modern HW" figure noted at the top.
+
+Re-measure: launch a Codespace and run
+`eigenscript dmg.eigs roms/cpu_instrs.gb --cycles 500000`, or add the n=5
+canary to the devcontainer `runCmd` on a throwaway CI branch (how this was
+captured; AOT extrapolation off this number is the future headroom).
