@@ -28,3 +28,8 @@ jobs:
             set -e
             eigenscript tests/test_cpu.eigs
             eigenscript tests/test_memory.eigs
+            echo "=== TEMP BENCH: cloud devcontainer CPU + DMG canary n=5 ==="
+            grep -m1 'model name' /proc/cpuinfo; echo "nproc=$(nproc)"
+            for i in 1 2 3 4 5; do
+              eigenscript dmg.eigs roms/cpu_instrs.gb --cycles 500000 2>&1 | grep 'Speed:' | sed "s/^/run $i: /"
+            done
