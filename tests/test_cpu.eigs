@@ -6,6 +6,22 @@ load_file of "src/cpu.eigs"
 load_file of "src/memory.eigs"
 load_file of "src/opcodes.eigs"
 
+# This unit test loads the cpu/memory/opcodes subsystem but NOT dmg.eigs (whose
+# main loop runs at top level). Two pieces of emulator glue that live in
+# dmg.eigs must be provisioned here so the opcode memory paths resolve:
+#   - bus_flush: cpu_mem_read/write call it on MMIO access. Mirrors
+#     dmg.eigs:bus_flush exactly (self-contained — folds the deferred
+#     pending_cycles into stepped_cycles).
+#   - init_exec_ctx: called per cpu/mem below. exec_op reads cpu/mem from the
+#     module-global _exec_ctx, which the emulator wires once at startup
+#     (dmg.eigs) and exec_op intentionally does not re-wire per call.
+define bus_flush(cpu, mem) as:
+    cycles is mem.pending_cycles
+    if cycles <= 0:
+        return null
+    mem.pending_cycles is 0
+    cpu.stepped_cycles += cycles
+
 print of "=== DMG CPU tests ==="
 
 # Helper: load bytes into memory at addr
@@ -75,6 +91,7 @@ print of "  INC/DEC: ok"
 # ---- Opcode execution: NOP ----
 cpu is new_cpu of null
 mem is new_memory of null
+init_exec_ctx of [cpu, mem]
 cpu.pc is 0x0100
 load_bytes of [mem, 0x0100, [0x00]]
 cycles is exec_op of [cpu, mem]
@@ -85,6 +102,7 @@ print of "  NOP: ok"
 # ---- Opcode: LD B, 0x42 (0x06 0x42) ----
 cpu is new_cpu of null
 mem is new_memory of null
+init_exec_ctx of [cpu, mem]
 cpu.pc is 0x0100
 load_bytes of [mem, 0x0100, [0x06, 0x42]]
 cycles is exec_op of [cpu, mem]
@@ -95,6 +113,7 @@ print of "  LD B, d8: ok"
 # ---- Opcode: XOR A (0xAF) — clears A, sets Z ----
 cpu is new_cpu of null
 mem is new_memory of null
+init_exec_ctx of [cpu, mem]
 cpu.pc is 0x0100
 cpu.a is 0x42
 load_bytes of [mem, 0x0100, [0xAF]]
@@ -106,6 +125,7 @@ print of "  XOR A: ok"
 # ---- Opcode: JP a16 (0xC3) ----
 cpu is new_cpu of null
 mem is new_memory of null
+init_exec_ctx of [cpu, mem]
 cpu.pc is 0x0100
 load_bytes of [mem, 0x0100, [0xC3, 0x50, 0x01]]
 cycles is exec_op of [cpu, mem]
@@ -116,6 +136,7 @@ print of "  JP a16: ok"
 # ---- Opcode: CALL/RET ----
 cpu is new_cpu of null
 mem is new_memory of null
+init_exec_ctx of [cpu, mem]
 cpu.pc is 0x0100
 cpu.sp is 0xFFFE
 load_bytes of [mem, 0x0100, [0xCD, 0x50, 0x01]]
@@ -131,6 +152,7 @@ print of "  CALL/RET: ok"
 # ---- Opcode: PUSH/POP BC ----
 cpu is new_cpu of null
 mem is new_memory of null
+init_exec_ctx of [cpu, mem]
 cpu.sp is 0xFFFE
 set_bc of [cpu, 0x1234]
 cpu.pc is 0x0100
@@ -145,6 +167,7 @@ print of "  PUSH/POP: ok"
 # ---- CB prefix: SWAP A ----
 cpu is new_cpu of null
 mem is new_memory of null
+init_exec_ctx of [cpu, mem]
 cpu.pc is 0x0100
 cpu.a is 0xF1
 load_bytes of [mem, 0x0100, [0xCB, 0x37]]
@@ -155,6 +178,7 @@ print of "  CB SWAP: ok"
 # ---- CB prefix: BIT 7, A ----
 cpu is new_cpu of null
 mem is new_memory of null
+init_exec_ctx of [cpu, mem]
 cpu.pc is 0x0100
 cpu.a is 0x80
 load_bytes of [mem, 0x0100, [0xCB, 0x7F]]
@@ -169,6 +193,7 @@ print of "  CB BIT: ok"
 # ---- STOP / CGB speed switch ----
 cpu is new_cpu of null
 mem is new_memory of null
+init_exec_ctx of [cpu, mem]
 cpu.pc is 0x0100
 load_bytes of [mem, 0x0100, [0x10, 0x00]]
 exec_op of [cpu, mem]
@@ -177,6 +202,7 @@ assert of [cpu.pc == 0x0102, "STOP consumes padding byte"]
 
 cpu is new_cpu of null
 mem is new_memory of null
+init_exec_ctx of [cpu, mem]
 cpu.pc is 0x0100
 mem.data[0xFF4D] is 0x01
 load_bytes of [mem, 0x0100, [0x10, 0x00]]
