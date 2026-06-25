@@ -1,0 +1,16 @@
+{
+  "name": "DMG",
+  "build": { "dockerfile": "Dockerfile" },
+  "workspaceFolder": "/workspaces/DMG",
+  "remoteUser": "root",
+
+  // eigenscript (gfx build) is on PATH. Headless: `eigenscript tests/*.eigs`.
+  // Graphical (under a display or Xvfb): `eigenscript dmg.eigs roms/<rom>.gb --gfx`.
+  "postCreateCommand": "eigenscript --version",
+
+  "customizations": {
+    "vscode": {
+      "settings": { "files.associations": { "*.eigs": "python" } }
+    }
+  }
+}
