@@ -20,7 +20,7 @@ RUN apt-get update \
 
 # Full EigenScript source at the pinned tag; build the gfx variant (SDL2 is
 # dlopen'd, so building needs no -dev headers). stdlib resolves at ../lib.
-ARG EIGS_REF=v0.21.0
+ARG EIGS_REF=v0.21.1
 RUN git clone --depth 1 --branch "${EIGS_REF}" \
         https://github.com/InauguralSystems/EigenScript.git /opt/eigenscript \
  && make -C /opt/eigenscript gfx CC=gcc
