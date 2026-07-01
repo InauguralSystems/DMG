@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-07-01
+
 ### Accuracy
 - Intra-instruction timer/LCD/APU stepping for `mem_timing` accuracy
 - Timer cycle-accounting fix — Blargg `cpu_instrs` aggregate suite now passes
