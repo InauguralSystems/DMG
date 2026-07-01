@@ -1,5 +1,10 @@
 # DMG
 
+[![CI](https://github.com/InauguralSystems/DMG/actions/workflows/ci.yml/badge.svg)](https://github.com/InauguralSystems/DMG/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/InauguralSystems/DMG/badge)](https://securityscorecards.dev/viewer/?uri=github.com/InauguralSystems/DMG)
+[![tag](https://img.shields.io/github/v/tag/InauguralSystems/DMG?label=version)](https://github.com/InauguralSystems/DMG/tags)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A Game Boy (DMG) emulator written in EigenScript. Built to stress-test the
 language with a demanding, spec-precise workload — the real deliverable is
 the gap analysis (`GAPS.md`), where every `GAP-DMG-NNN` is a primitive that
