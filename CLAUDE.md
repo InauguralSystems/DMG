@@ -22,8 +22,9 @@ and Tidepool.
 
 ## Toolchain
 
-EigenScript is **not** vendored. Pin **v0.13.0 minimum**; **v0.14.2**
-is the current tested release. Two binaries matter:
+EigenScript is **not** vendored. Pin **v0.13.0 minimum**; **v0.21.2**
+is the current tested release (`.devcontainer/Dockerfile` `EIGS_REF`).
+Two binaries matter:
 
 ```bash
 # Headless (no SDL2 needed) — Blargg ROMs, tests, benchmarks
@@ -81,7 +82,7 @@ Select, Escape = quit.
 | `src/opcodes.eigs` | Full SM83 decoder via `dispatch` table |
 | `src/ppu.eigs` | BG / window / sprite rendering with priority |
 | `src/joypad.eigs` | Button state, FF00 register, interrupt-on-press |
-| `tests/test_cpu.eigs` | 14 CPU unit tests |
+| `tests/test_cpu.eigs` | 15 CPU unit tests |
 | `tests/test_memory.eigs` | MBC1/3/5, cartridge RAM, echo RAM, DMA |
 | `tests/run_blargg_*.sh` | Blargg suite runners (cpu_instrs, timing) |
 | `tests/run_gfx_smoke.sh` | Bounded SDL/dummy-driver gfx smoke |
