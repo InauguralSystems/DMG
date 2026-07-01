@@ -27,12 +27,12 @@ iteration, sign extension, sort, and loop condition memory leak fixes.
 ## Architecture
 
 - `src/cpu.eigs` — Registers, flags, ALU operations, rotate/shift, DAA
-- `src/memory.eigs` — 64KB address space, MBC1/MBC3, lazy bank switching, DMA
+- `src/memory.eigs` — 64KB address space, MBC1/MBC3/MBC5, lazy bank switching, DMA
 - `src/opcodes.eigs` — Full SM83 instruction decoder via `dispatch`
 - `src/ppu.eigs` — Pixel Processing Unit: BG/window/sprite rendering
 - `src/joypad.eigs` — Button state, FF00 register, interrupt on press
 - `dmg.eigs` — Main loop, timer, interrupts, graphical + headless modes
-- `tests/test_cpu.eigs` — 14 CPU unit tests
+- `tests/test_cpu.eigs` — 15 CPU unit tests
 - `tests/test_memory.eigs` — MBC1/MBC3/MBC5, cartridge RAM, echo RAM, and DMA tests
 
 ## Usage
