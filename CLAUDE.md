@@ -27,10 +27,10 @@ is the current tested release. Two binaries matter:
 
 ```bash
 # Headless (no SDL2 needed) — Blargg ROMs, tests, benchmarks
-EIGS=${EIGENSCRIPT_BIN:-/home/jon/EigenScript/src/eigenscript}
+EIGS=${EIGENSCRIPT_BIN:-../EigenScript/src/eigenscript}
 
 # Graphical (requires libsdl2-dev; built with `make gfx`)
-EIGS_GFX=${EIGENSCRIPT_GFX:-/home/jon/EigenScript/src/eigenscript-gfx}
+EIGS_GFX=${EIGENSCRIPT_GFX:-../EigenScript/src/eigenscript-gfx}
 ```
 
 Headless is enough for `tests/test_*.eigs`, all Blargg suites, and
@@ -40,7 +40,7 @@ need the gfx binary.
 ## Run / test
 
 ```bash
-EIGS=/home/jon/EigenScript/src/eigenscript
+EIGS=../EigenScript/src/eigenscript
 
 # CPU + memory unit tests
 $EIGS tests/test_cpu.eigs

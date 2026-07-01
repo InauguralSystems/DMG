@@ -18,7 +18,7 @@ n=10 median methodology used historically in session memory).
 and gives a stable, low-variance reading for VM hot-path comparisons.
 
 ```bash
-/home/jon/EigenScript/src/eigenscript dmg.eigs roms/cpu_instrs.gb --cycles 500000
+../EigenScript/src/eigenscript dmg.eigs roms/cpu_instrs.gb --cycles 500000
 ```
 
 | variant | n | MHz (median) | range |
