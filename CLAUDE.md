@@ -22,7 +22,7 @@ and Tidepool.
 
 ## Toolchain
 
-EigenScript is **not** vendored. Pin **v0.13.0 minimum**; **v0.21.2**
+EigenScript is **not** vendored. Pin **v0.13.0 minimum**; **v0.23.0**
 is the current tested release (`.devcontainer/Dockerfile` `EIGS_REF`).
 Two binaries matter:
 
