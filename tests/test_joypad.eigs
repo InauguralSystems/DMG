@@ -56,6 +56,7 @@ assert of [mem.if_reg == 0, "release does not fire IRQ"]
 assert of [joy.right == 0, "release clears button state"]
 rd is joypad_read of [joy, mem.data[0xFF00]]
 assert of [(rd & 0x0F) == 0x0F, "joypad_read shows all released"]
+assert of [(rd & 0xC0) == 0xC0, "P1 bits 6-7 read as 1 (#19)"]
 print of "  release handling: ok"
 
 print of ""

@@ -79,5 +79,32 @@ on_px is ppu.fb[0]
 assert of [on_px == 3, f"window draws when LCDC.0=1: expected 3, got {on_px}"]
 print of "  window LCDC.0 gate: ok"
 
+# ---- Window internal line counter (#18) ----
+# The window line counter advances only on lines where the window renders.
+# Toggle the window off for screen line 1: line 2 must show window row 1
+# (internal counter), not row 2 (the ly - wy approximation).
+mem is new_memory of null
+ppu is new_ppu of null
+mem.data[0xFF47] is 0xE4
+mem.data[0xFF4A] is 0
+mem.data[0xFF4B] is 7
+# tile 0 (signed mode -> 0x9000): row 0 shade 3, row 1 shade 2, row 2 shade 1
+mem.data[0x9000] is 0xFF
+mem.data[0x9001] is 0xFF
+mem.data[0x9002] is 0x00
+mem.data[0x9003] is 0xFF
+mem.data[0x9004] is 0xFF
+mem.data[0x9005] is 0x00
+mem.data[0xFF40] is 0xA1
+ppu_render_scanline of [ppu, mem, 0]
+assert of [ppu.fb[0] == 3, "line 0 shows window row 0"]
+mem.data[0xFF40] is 0x81
+ppu_render_scanline of [ppu, mem, 1]
+mem.data[0xFF40] is 0xA1
+ppu_render_scanline of [ppu, mem, 2]
+row_px is ppu.fb[2 * 160]
+assert of [row_px == 2, f"window resumes at internal row 1: expected shade 2, got {row_px}"]
+print of "  window internal line counter: ok"
+
 print of ""
 print of "=== All PPU tests passed ==="

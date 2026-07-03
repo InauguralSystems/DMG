@@ -60,3 +60,9 @@ emulator demanded it. This is the whole point of DMG.
 - Severity: **High** — forced PPU rewrite in C
 - Status: **RESOLVED** — `for x in buffer:` and comprehensions now work
 - Description: VAL_BUFFER (compact double* array) only supported indexing. `for x in buf:`, list comprehensions, and what/who interrogation rejected buffers. This forced ppu_render_frame to be written in C instead of pure EigenScript. Buffer is now a first-class iterable type.
+
+## GAP-DMG-010: No hex formatting builtin
+- Found during: illegal-opcode diagnostics (#21) — PC/opcode want `0x`-hex output
+- Severity: **Low** — cold error paths only
+- Status: **OPEN (candidate)** — local `_hex of [v, nibbles]` helper in src/opcodes.eigs meanwhile
+- Description: f-strings interpolate decimal only; there is no `hex of v` / format-width builtin (`random_hex` exists but generates, not formats). Any emulator or systems tool wants hex for addresses/registers — EigenOS's REPL and DMG diagnostics both hand-roll it. Candidate upstream shape: `hex of v` or `format of [v, "04X"]`.

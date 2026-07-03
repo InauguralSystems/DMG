@@ -11,7 +11,8 @@ define new_ppu() as:
         "fb": buffer of 23040,
         "bg_pri": buffer of 160,
         "frame_count": 0,
-        "frame_skip": 4
+        "frame_skip": 4,
+        "win_line": 0
     }
 
 # Extract 4 shade values from a palette register (BGP/OBP)
@@ -29,6 +30,13 @@ define _sprite_x_key(s) as:
 # Render one scanline into the framebuffer
 define ppu_render_scanline(ppu, mem, ly) as:
     lcdc is mem.data[0xFF40]
+
+    # The window has an internal line counter that advances only on
+    # scanlines where the window actually renders (#18) — `ly - wy` is
+    # wrong when the window is toggled or WY changes mid-frame. It
+    # resets at the top of each frame.
+    if ly == 0:
+        ppu.win_line is 0
 
     # LCD off — blank scanline
     if (lcdc & 0x80) == 0:
@@ -110,7 +118,8 @@ define ppu_render_scanline(ppu, mem, ly) as:
             else:
                 win_map is 0x9800
             unsigned_mode is (lcdc & 0x10) != 0
-            win_y is ly - wy
+            win_y is ppu.win_line
+            ppu.win_line += 1
             win_row is win_y & 7
             prev_wtx is -1
             wtile_lo is 0

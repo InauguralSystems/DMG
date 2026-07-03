@@ -173,4 +173,13 @@ mem_write of [mem, 0xFF02, 0x01]
 assert of [mem.if_reg == 0, "non-start FF02 write does not transfer"]
 print of "  serial completion: ok"
 
+# ---- FF00 with no joypad attached: all released, not all pressed (#19) ----
+mem is new_memory of null
+mem_write of [mem, 0xFF00, 0x20]
+p1 is mem_read of [mem, 0xFF00]
+assert of [(p1 & 0x0F) == 0x0F, "null joypad reads buttons released"]
+assert of [(p1 & 0xC0) == 0xC0, "null joypad P1 bits 6-7 read as 1"]
+assert of [(p1 & 0x30) == 0x20, "null joypad preserves select bits"]
+print of "  null joypad read: ok"
+
 print of "\n=== All memory tests passed ==="
