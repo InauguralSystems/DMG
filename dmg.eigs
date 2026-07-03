@@ -265,6 +265,13 @@ loop while i < (len of argv):
         render_probe is 1
     i += 1
 
+# sort_by key for input events [cycle, button, state]. apply_input_events
+# stops scanning at the first future event, so cycle order is load-bearing.
+# `sort of` must NOT be used here: it silently no-ops on lists of lists
+# (EigenScript#368).
+define _input_event_cycle(ev) as:
+    return ev[0]
+
 define parse_input_script(script) as:
     events is []
     if (len of script) == 0:
@@ -285,8 +292,7 @@ define parse_input_script(script) as:
             duration is 4
         append of [events, [start_cycle, button, 1]]
         append of [events, [start_cycle + duration, button, 0]]
-    sort of events
-    return events
+    return sort_by of [events, _input_event_cycle]
 
 define apply_input_events(joy, mem, events, event_index, now_cycles) as:
     applied is 0

@@ -18,9 +18,10 @@ jobs:
 
       # Build the devcontainer (EigenScript pinned by .devcontainer/Dockerfile's
       # EIGS_REF — replaces the old clone-HEAD step that pinned nothing) and run
-      # the ROM-free unit tests inside it. eigenscript on PATH is the gfx build,
-      # which runs these headless tests fine. The Blargg suites and gfx smoke
-      # stay out of CI here (slow / ROM-gated), same as before.
+      # the unit tests + the fast input-script smoke (20K cycles on the
+      # committed cpu_instrs.gb) inside it. eigenscript on PATH is the gfx
+      # build, which runs these headless tests fine. The full Blargg suites
+      # and gfx smoke stay out of CI here (slow), same as before.
       - name: Build devcontainer and run unit tests
         uses: devcontainers/ci@v0.3
         with:
@@ -28,3 +29,5 @@ jobs:
             set -e
             eigenscript tests/test_cpu.eigs
             eigenscript tests/test_memory.eigs
+            eigenscript tests/test_ppu.eigs
+            tests/run_input_script_smoke.sh
