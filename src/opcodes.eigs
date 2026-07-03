@@ -314,6 +314,9 @@ define _op_halt(ctx) as:
 
 define _op_stop(ctx) as:
     fetch8 of [ctx[0], ctx[1]]
+    # STOP resets DIV and its internal divider on entry (#32).
+    ctx[1].data[0xFF04] is 0
+    ctx[1].div_counter is 0
     key1 is ctx[1].data[0xFF4D]
     if (key1 & 0x01) != 0:
         if (key1 & 0x80) != 0:

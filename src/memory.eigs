@@ -357,6 +357,14 @@ define mem_write(mem, addr, val) as:
             mem.apu_ch2_cycles is 0
         return null
 
+    # LCDC — turning the LCD off (bit 7 clear) holds LY at 0 immediately;
+    # the LCD step keeps it there and fires no VBlank while off (#30).
+    if addr == 0xFF40:
+        if (val & 0x80) == 0:
+            mem.data[0xFF44] is 0
+        mem.data[addr] is val
+        return null
+
     # DMA transfer (0xFF46)
     if addr == 0xFF46:
         src is val << 8

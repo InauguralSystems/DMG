@@ -100,7 +100,8 @@ define ppu_render_scanline(ppu, mem, ly) as:
             ppu.bg_pri[px] is 0
 
     # ---- Window layer ----
-    if (lcdc & 0x20) != 0:
+    # On DMG, LCDC bit 0 = 0 disables the window as well as the BG (#31).
+    if (lcdc & 0x21) == 0x21:
         wy is mem.data[0xFF4A]
         wx is mem.data[0xFF4B]
         if ly >= wy and wx <= 166:
