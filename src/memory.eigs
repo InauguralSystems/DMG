@@ -165,7 +165,7 @@ define mem_read(mem, addr) as:
 
     # ROM bank 0
     if addr < 0x4000:
-        if mem.rom_len > 0 and mem.mbc_type == 1 and mem.mbc1_mode == 1:
+        if mem.mbc1_mode == 1 and mem.mbc_type == 1 and mem.rom_len > 0:
             bank0 is (mem.mbc1_bank2 & 0x03) << 5
             if bank0 != 0:
                 return read_rom_bank of [mem, bank0, addr]

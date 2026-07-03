@@ -533,7 +533,19 @@ if gfx_mode == 1:
         unobserved:
           loop while frame_cycles < CYCLES_PER_FRAME:
             if cpu.halted == 1:
+                # Default skip to next LCD line boundary, but cap to next pending
+                # timer interrupt boundary — mirrors the headless halted path
+                # (#28: this cap was applied there and silently not here).
                 skip is CYCLES_PER_LINE - _scanline_counter
+                tac_h is mem.data[TIMER_TAC]
+                if (tac_h & 0x04) != 0:
+                    th is _tac_thresholds[tac_h & 0x03]
+                    ticks_to_overflow is 0x100 - mem.data[TIMER_TIMA]
+                    cyc_to_timer_int is (ticks_to_overflow * th) - mem.timer_counter
+                    if cyc_to_timer_int <= 0:
+                        cyc_to_timer_int is th
+                    if cyc_to_timer_int < skip:
+                        skip is cyc_to_timer_int
                 if skip < 4:
                     skip is 4
                 mem.pending_cycles += skip

@@ -123,7 +123,7 @@ define cpu_mem_read(cpu, mem, addr) as:
     mem.pending_cycles += 4
     addr is addr & 0xFFFF
     if addr < 0x4000:
-        if mem.rom_len > 0 and mem.mbc_type == 1 and mem.mbc1_mode == 1:
+        if mem.mbc1_mode == 1 and mem.mbc_type == 1 and mem.rom_len > 0:
             local bank0 is (mem.mbc1_bank2 & 0x03) << 5
             if bank0 != 0:
                 return read_rom_bank of [mem, bank0, addr]
@@ -152,6 +152,10 @@ define fetch8(cpu, mem) as:
     local pc is cpu.pc
     cpu.pc is (pc + 1) & 0xFFFF
     if pc < 0x4000:
+        if mem.mbc1_mode == 1 and mem.mbc_type == 1 and mem.rom_len > 0:
+            local bank0 is (mem.mbc1_bank2 & 0x03) << 5
+            if bank0 != 0:
+                return read_rom_bank of [mem, bank0, pc]
         return mem.data[pc]
     if pc < 0x8000:
         if mem.mbc_type > 0 and mem.rom_len > 0:
