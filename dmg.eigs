@@ -5,7 +5,7 @@
 # Graphical mode (--gfx): renders to SDL2 window with joypad input
 #
 # Usage: eigenscript dmg.eigs <rom_path> [--cycles N] [--gfx] [--gfx-frames N] [--frameskip N] [--scale N]
-#        [--input-script cycle:button:duration,...] [--render-probe]
+#        [--input-script cycle:button:duration,...] [--render-probe] [--strict-illegal]
 
 load_file of "src/cpu.eigs"
 load_file of "src/memory.eigs"
@@ -201,7 +201,7 @@ define print_blargg_ram_output(mem) as:
 
 argv is args of null
 if (len of argv) < 1:
-    print of "Usage: eigenscript dmg.eigs <rom_path> [--cycles N] [--gfx] [--gfx-frames N] [--frameskip N] [--scale N] [--input-script cycle:button:duration,...] [--render-probe]"
+    print of "Usage: eigenscript dmg.eigs <rom_path> [--cycles N] [--gfx] [--gfx-frames N] [--frameskip N] [--scale N] [--input-script cycle:button:duration,...] [--render-probe] [--strict-illegal]"
     assert of [0, "no ROM path provided"]
 
 rom_path is argv[0]
@@ -234,6 +234,8 @@ loop while i < (len of argv):
         input_script is argv[i]
     elif argv[i] == "--render-probe":
         render_probe is 1
+    elif argv[i] == "--strict-illegal":
+        _strict_illegal[0] is 1
     i += 1
 
 # sort_by key for input events [cycle, button, state]. apply_input_events

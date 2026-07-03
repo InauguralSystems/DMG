@@ -202,7 +202,9 @@ define mem_read(mem, addr) as:
     if addr == 0xFF00:
         if mem.joypad != null:
             return joypad_read of [mem.joypad, mem.data[0xFF00]]
-        return mem.data[addr]
+        # No joypad attached: all buttons released (active-low nibble
+        # high), unwired bits 6-7 high (#19) — NOT all-pressed.
+        return mem.data[addr] | 0xCF
 
     # IE register
     if addr == 0xFFFF:

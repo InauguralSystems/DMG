@@ -82,4 +82,5 @@ define joypad_read(joy, select) as:
             result &= 0x0F ^ 0x04
         if joy.start == 1:
             result &= 0x0F ^ 0x08
-    return (select & 0x30) | result
+    # Bits 6-7 are unwired on hardware and read as 1 (#19).
+    return 0xC0 | (select & 0x30) | result

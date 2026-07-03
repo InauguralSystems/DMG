@@ -216,6 +216,20 @@ assert of [cpu.stopped == 0, "STOP with KEY1 speed request continues"]
 assert of [mem.data[0xFF4D] == 0x80, "STOP toggles KEY1 speed bit on"]
 print of "  STOP/KEY1: ok"
 
+# ---- Illegal opcode: hex formatting + default continue (#21) ----
+assert of [(_hex of [0xD3, 2]) == "D3", "hex byte formatting"]
+assert of [(_hex of [0x0123, 4]) == "0123", "hex word formatting pads"]
+cpu is new_cpu of null
+mem is new_memory of null
+init_exec_ctx of [cpu, mem]
+cpu.pc is 0x0100
+load_bytes of [mem, 0x0100, [0xD3, 0x00]]
+cyc is exec_op of [cpu, mem]
+assert of [cyc == 4, "illegal opcode is a 4-cycle no-op by default"]
+assert of [cpu.stopped == 0 and cpu.halted == 0, "illegal opcode continues by default"]
+assert of [_strict_illegal[0] == 0, "strict-illegal defaults off"]
+print of "  illegal opcode handling: ok"
+
 # ---- fetch8 honors the MBC1 mode-1 bank0 remap (#27) ----
 # On a >=512KB MBC1 cart in banking mode 1, reads below 0x4000 come from
 # bank (bank2 << 5). fetch8 must see the same bytes as cpu_mem_read/mem_read
