@@ -4,6 +4,7 @@
 
 load_file of "src/cpu.eigs"
 load_file of "src/memory.eigs"
+load_file of "src/lcd.eigs"
 load_file of "src/opcodes.eigs"
 
 # This unit test loads the cpu/memory/opcodes subsystem but NOT dmg.eigs (whose

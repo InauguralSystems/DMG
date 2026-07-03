@@ -9,6 +9,7 @@
 
 load_file of "src/cpu.eigs"
 load_file of "src/memory.eigs"
+load_file of "src/lcd.eigs"
 load_file of "src/opcodes.eigs"
 load_file of "src/joypad.eigs"
 load_file of "src/ppu.eigs"
@@ -34,31 +35,15 @@ _tac_thresholds is [1024, 16, 64, 256]
 # ============================================================
 
 CYCLES_PER_LINE is 456
-LINES_PER_FRAME is 154
-VBLANK_START_LINE is 144
 CYCLES_PER_FRAME is 70224
 
-_scanline_counter is 0
+# LCD mode machine + STAT live in src/lcd.eigs (#15); its state is in mem
+# fields (lcd_counter / lcd_next / ppu_mode). The bus-tick fast path only
+# compares the counter to the next event boundary — lcd_event stays
+# out-of-line: loop-body bytecode growth costs ~3% on the L1i-bound canary.
 
 # _gfx_ppu is set to PPU dict in graphical mode, null in headless
 _gfx_ppu is null
-
-# The one canonical scanline-crossing body, shared by bus_flush and both run
-# loops (shrinks the #20 three-copy drift surface). Only ever called on a
-# line crossing (~1/456 T-cycles), so the call stays off the per-flush fast
-# path — do NOT inline this back into the loops: the loop-body bytecode
-# growth costs ~3% on the L1i-bound canary.
-# LCD off (LCDC bit 7 clear): LY holds at 0 and no VBlank fires (#30).
-define lcd_line_advance(mem) as:
-    if (mem.data[0xFF40] & 0x80) == 0:
-        mem.data[0xFF44] is 0
-        return null
-    local ly is mem.data[0xFF44] + 1
-    if ly >= LINES_PER_FRAME:
-        ly is 0
-    mem.data[0xFF44] is ly
-    if ly == VBLANK_START_LINE:
-        mem.if_reg |= 0x01
 
 # STOP idle: wake on a pending joypad press (IF bit 4), else report a line's
 # worth of idle time with the clocks halted — DIV/TIMA/LCD frozen (#32).
@@ -125,10 +110,9 @@ define bus_flush(cpu, mem) as:
                 mem.data[TIMER_TIMA] is tima
 
     # --- LCD step: counter inline, crossing body out-of-line ---
-    _scanline_counter += cycles
-    if _scanline_counter >= CYCLES_PER_LINE:
-        _scanline_counter -= CYCLES_PER_LINE
-        lcd_line_advance of mem
+    mem.lcd_counter += cycles
+    if mem.lcd_counter >= mem.lcd_next:
+        lcd_event of mem
 
     if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
         apu_step of [mem, cycles]
@@ -350,7 +334,7 @@ define run_headless_loop(cpu, mem, max_cycles, input_events, total_cycles_in) as
             # timer interrupt boundary so timer interrupts fire on the right
             # instruction-cycle boundary instead of being delayed up to a line.
             # twin: halted-skip copy=headless
-            skip is CYCLES_PER_LINE - _scanline_counter
+            skip is mem.lcd_next - mem.lcd_counter
             tac_h is mem.data[TIMER_TAC]
             if (tac_h & 0x04) != 0:
                 th is _tac_thresholds[tac_h & 0x03]
@@ -427,10 +411,9 @@ define run_headless_loop(cpu, mem, max_cycles, input_events, total_cycles_in) as
                         mem.tima_reload_pending is 4
                     else:
                         mem.data[TIMER_TIMA] is tima_p
-            _scanline_counter += pc
-            if _scanline_counter >= CYCLES_PER_LINE:
-                _scanline_counter -= CYCLES_PER_LINE
-                lcd_line_advance of mem
+            mem.lcd_counter += pc
+            if mem.lcd_counter >= mem.lcd_next:
+                lcd_event of mem
             if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
                 apu_step of [mem, pc]
             # twin: bus-tick end
@@ -530,7 +513,7 @@ if gfx_mode == 1:
                 # timer interrupt boundary — mirrors the headless halted path
                 # (#28: this cap was applied there and silently not here).
                 # twin: halted-skip copy=gfx map frame_cycles=tc
-                skip is CYCLES_PER_LINE - _scanline_counter
+                skip is mem.lcd_next - mem.lcd_counter
                 tac_h is mem.data[TIMER_TAC]
                 if (tac_h & 0x04) != 0:
                     th is _tac_thresholds[tac_h & 0x03]
@@ -605,10 +588,9 @@ if gfx_mode == 1:
                             mem.tima_reload_pending is 4
                         else:
                             mem.data[TIMER_TIMA] is tima_p
-                _scanline_counter += pc
-                if _scanline_counter >= CYCLES_PER_LINE:
-                    _scanline_counter -= CYCLES_PER_LINE
-                    lcd_line_advance of mem
+                mem.lcd_counter += pc
+                if mem.lcd_counter >= mem.lcd_next:
+                    lcd_event of mem
                 if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
                     apu_step of [mem, pc]
                 # twin: bus-tick end

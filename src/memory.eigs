@@ -36,6 +36,8 @@ define new_memory() as:
         "ie": 0,
         "if_reg": 0,
         "joypad": null,
+        "lcd_counter": 0,
+        "lcd_next": 456,
         "div_counter": 0,
         "timer_counter": 0,
         "tima_reload_pending": 0,
@@ -210,6 +212,10 @@ define mem_read(mem, addr) as:
     if addr == 0xFF0F:
         return mem.if_reg | 0xE0
 
+    # STAT register — live mode + coincidence bits (#15, src/lcd.eigs)
+    if addr == 0xFF41:
+        return stat_read of mem
+
     # NR52 sound status
     if addr == 0xFF26:
         status is mem.data[addr] & 0xF0
@@ -330,6 +336,13 @@ define mem_write(mem, addr, val) as:
         if val == 0x81:
             ch is mem.data[0xFF01]
             mem.serial_output is f"{mem.serial_output}{chr of ch}"
+            # Transfer completes immediately: clear the start bit and
+            # request the serial interrupt (#16). Real hw takes ~4096
+            # T-cycles per byte; instant completion only makes back-to-back
+            # transfers fast, it doesn't reorder anything observable.
+            mem.data[addr] is val & 0x7F
+            mem.if_reg |= 0x08
+            return null
         mem.data[addr] is val
         return null
 
@@ -357,12 +370,24 @@ define mem_write(mem, addr, val) as:
             mem.apu_ch2_cycles is 0
         return null
 
-    # LCDC — turning the LCD off (bit 7 clear) holds LY at 0 immediately;
-    # the LCD step keeps it there and fires no VBlank while off (#30).
+    # LCDC — off pins LY/mode immediately, on restarts from line 0 mode 2
+    # (#30/#15, src/lcd.eigs).
     if addr == 0xFF40:
-        if (val & 0x80) == 0:
-            mem.data[0xFF44] is 0
+        lcd_enable_write of [mem, val]
+        return null
+
+    # STAT — only the interrupt-enable selects (bits 3-6) are writable;
+    # mode and coincidence are live on read; arming the HBlank source
+    # reschedules the line's event boundary (#15, src/lcd.eigs).
+    if addr == 0xFF41:
+        stat_write of [mem, val]
+        return null
+
+    # LYC — writing it re-evaluates the coincidence STAT source (#15).
+    if addr == 0xFF45:
         mem.data[addr] is val
+        if (mem.data[0xFF40] & 0x80) != 0:
+            lyc_check of mem
         return null
 
     # DMA transfer (0xFF46)
