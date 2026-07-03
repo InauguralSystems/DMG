@@ -195,10 +195,14 @@ cpu is new_cpu of null
 mem is new_memory of null
 init_exec_ctx of [cpu, mem]
 cpu.pc is 0x0100
+mem.data[0xFF04] is 0xAB
+mem.div_counter is 100
 load_bytes of [mem, 0x0100, [0x10, 0x00]]
 exec_op of [cpu, mem]
 assert of [cpu.stopped == 1, "STOP without KEY1 arms stopped state"]
 assert of [cpu.pc == 0x0102, "STOP consumes padding byte"]
+assert of [mem.data[0xFF04] == 0, "STOP resets DIV (#32)"]
+assert of [mem.div_counter == 0, "STOP resets DIV internal divider (#32)"]
 
 cpu is new_cpu of null
 mem is new_memory of null

@@ -25,37 +25,9 @@ TIMER_TAC  is 0xFF07
 # TAC frequency -> T-cycle thresholds
 _tac_thresholds is [1024, 16, 64, 256]
 
-define timer_step(mem, cycles) as:
-    mem.div_counter += cycles
-    if mem.div_counter >= 256:
-        mem.data[TIMER_DIV] is (mem.data[TIMER_DIV] + floor of (mem.div_counter / 256)) & 0xFF
-        mem.div_counter is mem.div_counter % 256
-
-    # On real DMG, TIMA overflow latches as 0 for ~4 T-cycles, then TMA is
-    # loaded into TIMA and the timer interrupt is requested. The CPU can
-    # cancel the reload by writing TIMA during the window (handled in mem_write).
-    if mem.tima_reload_pending > 0:
-        mem.tima_reload_pending -= cycles
-        if mem.tima_reload_pending <= 0:
-            mem.data[TIMER_TIMA] is mem.data[TIMER_TMA]
-            mem.if_reg |= 0x04
-            mem.tima_reload_pending is 0
-
-    tac is mem.data[TIMER_TAC]
-    if (tac & 0x04) == 0:
-        return null
-
-    threshold is _tac_thresholds[tac & 0x03]
-    mem.timer_counter += cycles
-
-    loop while mem.timer_counter >= threshold:
-        mem.timer_counter -= threshold
-        tima is mem.data[TIMER_TIMA] + 1
-        if tima > 0xFF:
-            mem.data[TIMER_TIMA] is 0
-            mem.tima_reload_pending is 4
-        else:
-            mem.data[TIMER_TIMA] is tima
+# (timer_step and lcd_step used to live here as standalone functions; they
+# were superseded by the inlined copies in bus_flush and the two run loops
+# and had no callers left — deleted rather than left to drift, #20/#30.)
 
 # ============================================================
 # LCD / VBlank timing
@@ -71,16 +43,31 @@ _scanline_counter is 0
 # _gfx_ppu is set to PPU dict in graphical mode, null in headless
 _gfx_ppu is null
 
-define lcd_step(mem, cycles) as:
-    _scanline_counter += cycles
-    if _scanline_counter >= CYCLES_PER_LINE:
-        _scanline_counter -= CYCLES_PER_LINE
-        ly is mem.data[0xFF44] + 1
-        if ly >= LINES_PER_FRAME:
-            ly is 0
-        mem.data[0xFF44] is ly
-        if ly == VBLANK_START_LINE:
-            mem.if_reg |= 0x01
+# The one canonical scanline-crossing body, shared by bus_flush and both run
+# loops (shrinks the #20 three-copy drift surface). Only ever called on a
+# line crossing (~1/456 T-cycles), so the call stays off the per-flush fast
+# path — do NOT inline this back into the loops: the loop-body bytecode
+# growth costs ~3% on the L1i-bound canary.
+# LCD off (LCDC bit 7 clear): LY holds at 0 and no VBlank fires (#30).
+define lcd_line_advance(mem) as:
+    if (mem.data[0xFF40] & 0x80) == 0:
+        mem.data[0xFF44] is 0
+        return null
+    local ly is mem.data[0xFF44] + 1
+    if ly >= LINES_PER_FRAME:
+        ly is 0
+    mem.data[0xFF44] is ly
+    if ly == VBLANK_START_LINE:
+        mem.if_reg |= 0x01
+
+# STOP idle: wake on a pending joypad press (IF bit 4), else report a line's
+# worth of idle time with the clocks halted — DIV/TIMA/LCD frozen (#32).
+# Out-of-line so the stopped branch adds minimal bytecode to the hot loops.
+define stop_idle(cpu, mem) as:
+    if (mem.if_reg & 0x10) != 0:
+        cpu.stopped is 0
+        return 0
+    return CYCLES_PER_LINE
 
 define apu_step(mem, cycles) as:
     apu_cycles is cycles
@@ -114,6 +101,9 @@ define bus_flush(cpu, mem) as:
     if mem.div_counter >= 256:
         mem.data[TIMER_DIV] is (mem.data[TIMER_DIV] + floor of (mem.div_counter / 256)) & 0xFF
         mem.div_counter is mem.div_counter % 256
+    # On real DMG, TIMA overflow latches as 0 for ~4 T-cycles, then TMA is
+    # loaded into TIMA and the timer interrupt is requested. The CPU can
+    # cancel the reload by writing TIMA during the window (handled in mem_write).
     if mem.tima_reload_pending > 0:
         mem.tima_reload_pending -= cycles
         if mem.tima_reload_pending <= 0:
@@ -133,16 +123,11 @@ define bus_flush(cpu, mem) as:
             else:
                 mem.data[TIMER_TIMA] is tima
 
-    # --- inline lcd_step ---
+    # --- LCD step: counter inline, crossing body out-of-line ---
     _scanline_counter += cycles
     if _scanline_counter >= CYCLES_PER_LINE:
         _scanline_counter -= CYCLES_PER_LINE
-        ly is mem.data[0xFF44] + 1
-        if ly >= LINES_PER_FRAME:
-            ly is 0
-        mem.data[0xFF44] is ly
-        if ly == VBLANK_START_LINE:
-            mem.if_reg |= 0x01
+        lcd_line_advance of mem
 
     if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
         apu_step of [mem, cycles]
@@ -372,6 +357,10 @@ define run_headless_loop(cpu, mem, max_cycles, input_events, total_cycles_in) as
                     cyc_to_timer_int is th
                 if cyc_to_timer_int < skip:
                     skip is cyc_to_timer_int
+            # An in-flight TIMA reload (the 4-cycle latch window) is its own
+            # interrupt boundary — don't skip past it (#29).
+            if mem.tima_reload_pending > 0 and mem.tima_reload_pending < skip:
+                skip is mem.tima_reload_pending
             if skip < 4:
                 skip is 4
             mem.pending_cycles += skip
@@ -385,7 +374,8 @@ define run_headless_loop(cpu, mem, max_cycles, input_events, total_cycles_in) as
             continue
 
         if cpu.stopped == 1:
-            break
+            tc += stop_idle of [cpu, mem]
+            continue
 
         # Inlined exec_op — saves one function call per instruction.
         cpu.stepped_cycles is 0
@@ -433,12 +423,7 @@ define run_headless_loop(cpu, mem, max_cycles, input_events, total_cycles_in) as
             _scanline_counter += pc
             if _scanline_counter >= CYCLES_PER_LINE:
                 _scanline_counter -= CYCLES_PER_LINE
-                ly_p is mem.data[0xFF44] + 1
-                if ly_p >= LINES_PER_FRAME:
-                    ly_p is 0
-                mem.data[0xFF44] is ly_p
-                if ly_p == VBLANK_START_LINE:
-                    mem.if_reg |= 0x01
+                lcd_line_advance of mem
             if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
                 apu_step of [mem, pc]
 
@@ -546,6 +531,10 @@ if gfx_mode == 1:
                         cyc_to_timer_int is th
                     if cyc_to_timer_int < skip:
                         skip is cyc_to_timer_int
+                # An in-flight TIMA reload (the 4-cycle latch window) is its own
+                # interrupt boundary — don't skip past it (#29).
+                if mem.tima_reload_pending > 0 and mem.tima_reload_pending < skip:
+                    skip is mem.tima_reload_pending
                 if skip < 4:
                     skip is 4
                 mem.pending_cycles += skip
@@ -559,7 +548,8 @@ if gfx_mode == 1:
                 continue
 
             if cpu.stopped == 1:
-                break
+                frame_cycles += stop_idle of [cpu, mem]
+                continue
 
             # Inlined exec_op + post-instruction bus flush (matches headless loop).
             cpu.stepped_cycles is 0
@@ -605,12 +595,7 @@ if gfx_mode == 1:
                 _scanline_counter += pc
                 if _scanline_counter >= CYCLES_PER_LINE:
                     _scanline_counter -= CYCLES_PER_LINE
-                    ly_p is mem.data[0xFF44] + 1
-                    if ly_p >= LINES_PER_FRAME:
-                        ly_p is 0
-                    mem.data[0xFF44] is ly_p
-                    if ly_p == VBLANK_START_LINE:
-                        mem.if_reg |= 0x01
+                    lcd_line_advance of mem
                 if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
                     apu_step of [mem, pc]
 
@@ -621,9 +606,6 @@ if gfx_mode == 1:
             frame_cycles += int_cycles
 
         total_cycles += frame_cycles
-
-        if cpu.stopped == 1:
-            running is 0
 
         # Render frame (with frame skip)
         ppu.frame_count += 1

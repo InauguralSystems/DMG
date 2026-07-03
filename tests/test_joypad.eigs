@@ -1,0 +1,62 @@
+# ============================================================
+# DMG joypad unit tests — P1 column-gated interrupt (#33)
+# ============================================================
+# The joypad interrupt line only pulls for presses in the column the game
+# has selected via P1 bits 4/5 (active low). A press in an unselected
+# group must not raise IF bit 4.
+
+load_file of "src/memory.eigs"
+load_file of "src/joypad.eigs"
+
+print of "=== DMG joypad tests ==="
+
+# ---- Direction column selected: direction press fires, action doesn't ----
+mem is new_memory of null
+joy is new_joypad of null
+mem.joypad is joy
+mem_write of [mem, 0xFF00, 0x20]
+joypad_set_button of [joy, mem, "right", 1]
+assert of [(mem.if_reg & 0x10) != 0, "direction press fires IRQ when direction column selected"]
+mem.if_reg is 0
+joypad_set_button of [joy, mem, "a", 1]
+assert of [(mem.if_reg & 0x10) == 0, "action press does NOT fire IRQ when action column deselected"]
+print of "  direction column gating: ok"
+
+# ---- Action column selected: mirror image ----
+mem is new_memory of null
+joy is new_joypad of null
+mem.joypad is joy
+mem_write of [mem, 0xFF00, 0x10]
+joypad_set_button of [joy, mem, "start", 1]
+assert of [(mem.if_reg & 0x10) != 0, "action press fires IRQ when action column selected"]
+mem.if_reg is 0
+joypad_set_button of [joy, mem, "down", 1]
+assert of [(mem.if_reg & 0x10) == 0, "direction press does NOT fire IRQ when direction column deselected"]
+print of "  action column gating: ok"
+
+# ---- Both columns deselected: nothing fires ----
+mem is new_memory of null
+joy is new_joypad of null
+mem.joypad is joy
+mem_write of [mem, 0xFF00, 0x30]
+joypad_set_button of [joy, mem, "b", 1]
+joypad_set_button of [joy, mem, "left", 1]
+assert of [mem.if_reg == 0, "no IRQ with both columns deselected"]
+print of "  both-deselected gating: ok"
+
+# ---- Releases never fire; button state still tracks ----
+mem is new_memory of null
+joy is new_joypad of null
+mem.joypad is joy
+mem_write of [mem, 0xFF00, 0x20]
+joypad_set_button of [joy, mem, "right", 1]
+mem.if_reg is 0
+joypad_set_button of [joy, mem, "right", 0]
+assert of [mem.if_reg == 0, "release does not fire IRQ"]
+assert of [joy.right == 0, "release clears button state"]
+rd is joypad_read of [joy, mem.data[0xFF00]]
+assert of [(rd & 0x0F) == 0x0F, "joypad_read shows all released"]
+print of "  release handling: ok"
+
+print of ""
+print of "=== All joypad tests passed ==="

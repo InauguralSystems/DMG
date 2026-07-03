@@ -55,5 +55,29 @@ tie_px is ppu.fb[8 * 160 + 40]
 assert of [tie_px == 1, f"equal-X tie goes to lower OAM index: expected shade 1, got {tie_px}"]
 print of "  sprite equal-X OAM order: ok"
 
+# ---- Window gated on LCDC bit 0 (#31) ----
+# On DMG, LCDC.0 = 0 disables BG *and* window; window-enable bit 5 alone
+# must not draw. Window content: tile 0 (signed mode -> 0x9000) solid
+# shade 3, WY=0, WX=7 -> covers the full line from column 0.
+mem is new_memory of null
+ppu is new_ppu of null
+mem.data[0xFF47] is 0xE4
+mem.data[0xFF4A] is 0
+mem.data[0xFF4B] is 7
+for r in range of 8:
+    mem.data[0x9000 + r * 2] is 0xFF
+    mem.data[0x9000 + r * 2 + 1] is 0xFF
+# LCD on + window on, BG/window master bit 0 OFF -> nothing drawn
+mem.data[0xFF40] is 0xA0
+ppu_render_scanline of [ppu, mem, 0]
+off_px is ppu.fb[0]
+assert of [off_px == 0, f"window suppressed when LCDC.0=0: expected 0, got {off_px}"]
+# Same setup with bit 0 ON -> window draws shade 3
+mem.data[0xFF40] is 0xA1
+ppu_render_scanline of [ppu, mem, 0]
+on_px is ppu.fb[0]
+assert of [on_px == 3, f"window draws when LCDC.0=1: expected 3, got {on_px}"]
+print of "  window LCDC.0 gate: ok"
+
 print of ""
 print of "=== All PPU tests passed ==="

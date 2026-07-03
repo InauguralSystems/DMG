@@ -10,6 +10,7 @@ define new_joypad() as:
     }
 
 define joypad_set_button(joy, mem, button, pressed) as:
+    local grp is 0
     if button == "right":
         joy.right is pressed
     elif button == "left":
@@ -20,17 +21,28 @@ define joypad_set_button(joy, mem, button, pressed) as:
         joy.down is pressed
     elif button == "a" or button == "z":
         joy.a is pressed
+        grp is 1
     elif button == "b" or button == "x":
         joy.b is pressed
+        grp is 1
     elif button == "select" or button == "backspace":
         joy.select is pressed
+        grp is 1
     elif button == "start" or button == "return":
         joy.start is pressed
+        grp is 1
     else:
         return 0
 
+    # The joypad interrupt line only pulls for presses in the column the
+    # game has selected via P1 bits 4/5 (active low) — a press in an
+    # unselected group must not raise IF bit 4 (#33).
     if pressed == 1:
-        mem.if_reg |= 0x10
+        local sel is mem.data[0xFF00]
+        if grp == 0 and (sel & 0x10) == 0:
+            mem.if_reg |= 0x10
+        elif grp == 1 and (sel & 0x20) == 0:
+            mem.if_reg |= 0x10
     return 1
 
 # Update button state from SDL event, fire joypad interrupt on press
