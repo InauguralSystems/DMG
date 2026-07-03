@@ -211,4 +211,30 @@ assert of [cpu.stopped == 0, "STOP with KEY1 speed request continues"]
 assert of [mem.data[0xFF4D] == 0x80, "STOP toggles KEY1 speed bit on"]
 print of "  STOP/KEY1: ok"
 
+# ---- fetch8 honors the MBC1 mode-1 bank0 remap (#27) ----
+# On a >=512KB MBC1 cart in banking mode 1, reads below 0x4000 come from
+# bank (bank2 << 5). fetch8 must see the same bytes as cpu_mem_read/mem_read
+# — it silently fetched bank 0 while data reads were remapped.
+cpu is new_cpu of null
+mem is new_memory of null
+banks is 64
+rom is buffer of (banks * 0x4000)
+for bank in range of banks:
+    rom[(bank * 0x4000) + 0x1234] is (bank + 0x31) & 0xFF
+mem.rom is rom
+mem.rom_len is banks * 0x4000
+mem.mbc_type is 1
+mem_write of [mem, 0x6000, 0x01]
+mem_write of [mem, 0x4000, 0x01]
+assert of [mem_read of [mem, 0x1234] == ((0x20 + 0x31) & 0xFF), "mem_read remaps mode-1 bank0"]
+cpu.pc is 0x1234
+fetched is fetch8 of [cpu, mem]
+assert of [fetched == ((0x20 + 0x31) & 0xFF), f"fetch8 remaps mode-1 bank0: expected 0x51, got {fetched}"]
+assert of [cpu.pc == 0x1235, "fetch8 advanced PC"]
+# Mode 0: bank0 window reads straight-through again
+mem_write of [mem, 0x6000, 0x00]
+cpu.pc is 0x1234
+assert of [(fetch8 of [cpu, mem]) == 0, "fetch8 mode 0 reads unbanked bank 0"]
+print of "  fetch8 MBC1 mode-1 bank0 remap: ok"
+
 print of "\n=== All CPU tests passed ==="
