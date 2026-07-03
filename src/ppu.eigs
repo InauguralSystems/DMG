@@ -19,6 +19,13 @@ define new_ppu() as:
 define palette_shades(pal) as:
     return [pal & 3, (pal >> 2) & 3, (pal >> 4) & 3, (pal >> 6) & 3]
 
+# sort_by key for sprite records [sx, sy, tile, flags, oam_idx]: X coordinate.
+# sort_by is stable by original index, so equal-X sprites keep OAM order —
+# the DMG priority rule. `sort of` must NOT be used on these records: it
+# silently no-ops on lists of lists (EigenScript#368).
+define _sprite_x_key(s) as:
+    return s[0]
+
 # Render one scanline into the framebuffer
 define ppu_render_scanline(ppu, mem, ly) as:
     lcdc is mem.data[0xFF40]
@@ -158,7 +165,7 @@ define ppu_render_scanline(ppu, mem, ly) as:
                     break
 
         # Sort by X coordinate (stable by OAM order for equal X)
-        sort of sprites
+        sprites is sort_by of [sprites, _sprite_x_key]
 
         # Render sprites (lower index = higher priority for same X)
         # Iterate in reverse so higher-priority sprites overwrite

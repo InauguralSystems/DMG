@@ -1,0 +1,59 @@
+# ============================================================
+# DMG PPU unit tests — sprite priority (regressions for #26)
+# ============================================================
+# `sort of sprites` was a silent no-op on the sprite records
+# (EigenScript#368), so the script PPU had no X-priority at all
+# and diverged from the native ppu_render_frame renderer.
+
+load_file of "src/memory.eigs"
+load_file of "src/ppu.eigs"
+
+print of "=== DMG PPU tests ==="
+
+# Fresh mem/ppu with LCD + sprites on, BG off, identity OBP0,
+# tile 1 = solid shade 1 (lo plane), tile 2 = solid shade 2 (hi plane).
+define sprite_test_setup() as:
+    m is new_memory of null
+    m.data[0xFF40] is 0x82
+    m.data[0xFF48] is 0xE4
+    for r in range of 8:
+        m.data[0x8000 + 16 + r * 2] is 0xFF
+        m.data[0x8000 + 32 + r * 2 + 1] is 0xFF
+    return m
+
+# ---- Different X: smaller X wins over lower OAM index ----
+mem is sprite_test_setup of null
+ppu is new_ppu of null
+# OAM 0: x=48 (sx=40), tile 1 (shade 1)
+mem.data[0xFE00] is 24
+mem.data[0xFE01] is 48
+mem.data[0xFE02] is 1
+# OAM 1: x=44 (sx=36), tile 2 (shade 2) — overlaps columns 40..43
+mem.data[0xFE04] is 24
+mem.data[0xFE05] is 44
+mem.data[0xFE06] is 2
+ppu_render_scanline of [ppu, mem, 8]
+overlap_px is ppu.fb[8 * 160 + 40]
+assert of [overlap_px == 2, f"smaller X wins overlap: expected shade 2, got {overlap_px}"]
+solo_px is ppu.fb[8 * 160 + 45]
+assert of [solo_px == 1, f"non-overlap column keeps its own sprite: expected shade 1, got {solo_px}"]
+print of "  sprite X priority: ok"
+
+# ---- Equal X: lower OAM index wins (sort must stay OAM-stable) ----
+mem is sprite_test_setup of null
+ppu is new_ppu of null
+# OAM 0: y=24 (sy=8, row 0 at ly=8), x=48, tile 1 — must win
+mem.data[0xFE00] is 24
+mem.data[0xFE01] is 48
+mem.data[0xFE02] is 1
+# OAM 1: y=18 (sy=2, row 6 at ly=8), x=48, tile 2 — same X, smaller sy
+mem.data[0xFE04] is 18
+mem.data[0xFE05] is 48
+mem.data[0xFE06] is 2
+ppu_render_scanline of [ppu, mem, 8]
+tie_px is ppu.fb[8 * 160 + 40]
+assert of [tie_px == 1, f"equal-X tie goes to lower OAM index: expected shade 1, got {tie_px}"]
+print of "  sprite equal-X OAM order: ok"
+
+print of ""
+print of "=== All PPU tests passed ==="

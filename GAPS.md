@@ -47,6 +47,13 @@ emulator demanded it. This is the whole point of DMG.
 - Severity: **Low** — 10-element sort per frame
 - Status: **RESOLVED** — `sort of list` C builtin using qsort
 - Description: Manual 8-line insertion sort replaced with in-place C qsort. Pure EigenScript sort in lib/sort.eigs still available for custom comparators.
+- **Post-mortem (2026-07-03):** the resolution never worked for this gap's own motivating call site — see GAP-DMG-009. Lesson: verify an upstreamed fix against the exact consumer use that demanded it.
+
+## GAP-DMG-009: `sort of` silently no-ops on non-numeric lists
+- Found during: full-repo review — sprite X-priority (#26) and input-script event ordering (#25) were both silently unsorted
+- Severity: **Medium** — silent-wrong results, invisible to every test suite
+- Status: **OPEN upstream** — EigenScript#368 (proposal: raise on non-numeric elements instead of comparing as equal)
+- Description: `builtin_sort`'s comparator returns 0 for any non-`VAL_NUM` pair, so sorting a list of records does nothing — and whether input order is even preserved is libc-dependent (qsort gives no stability guarantee for all-equal elements). DMG workaround: `sort_by of [list, key_fn]` (numeric key, stable by original index), which also encodes the DMG equal-X OAM-order tiebreak for free.
 
 ## GAP-DMG-008: VAL_BUFFER not iterable
 - Found during: PPU implementation, ROM loading
