@@ -84,6 +84,7 @@ Select, Escape = quit.
 | `src/joypad.eigs` | Button state, FF00 register, interrupt-on-press |
 | `tests/test_cpu.eigs` | 15 CPU unit tests |
 | `tests/test_memory.eigs` | MBC1/3/5, cartridge RAM, echo RAM, DMA |
+| `tests/check_twins.sh` | Twin gate — the inlined hot-loop copies must not drift (#20) |
 | `tests/run_blargg_*.sh` | Blargg suite runners (cpu_instrs, timing) |
 | `tests/run_gfx_smoke.sh` | Bounded SDL/dummy-driver gfx smoke |
 | `tests/run_pokemon_red_smoke.sh` | Scripted Pokemon Red smoke |
@@ -123,6 +124,15 @@ Select, Escape = quit.
 - **Cycle-accuracy is non-negotiable for timing ROMs.** If a perf
   change makes `instr_timing` or `mem_timing` regress, the perf
   change is wrong, not the test.
+- **The inlined hot-loop copies are gated, not trusted.** The
+  bus-tick, halted-skip, and inlined-exec bodies exist in multiple
+  hand-synchronized copies (deliberate — a shared function there
+  costs measurably, and even loop-body bytecode *growth* costs ~3%
+  on the L1i-bound canary). Each copy is wrapped in `# twin:`
+  markers; `tests/check_twins.sh` (CI) diffs the normalized copies
+  and fails on drift, which has shipped real bugs twice (#27, #28).
+  Editing one copy means editing them all — the gate tells you when
+  you've missed one. Keep the `map` renames on the markers accurate.
 - **n=5 for any perf claim, with the canary methodology.** The
   500K-cycle `cpu_instrs.gb` probe is the standard regression
   canary (low variance, startup-dominated, comparable across
