@@ -1,0 +1,134 @@
+# ============================================================
+# DMG LCD/STAT unit tests — PPU mode + FF41 (#15)
+# ============================================================
+# The mode is computed lazily from (LY, lcd_counter); events run at one
+# per line unless the HBlank STAT source arms the intra-line boundary.
+# lcd_run replicates the bus-tick caller contract (add cycles, call
+# lcd_event; it no-ops below the boundary).
+
+load_file of "src/memory.eigs"
+load_file of "src/lcd.eigs"
+
+print of "=== DMG LCD/STAT tests ==="
+
+define lcd_run(mem, cycles) as:
+    mem.lcd_counter += cycles
+    lcd_event of mem
+
+# ---- Lazy mode over one visible line ----
+mem is new_memory of null
+mem.data[0xFF40] is 0x91
+assert of [(lcd_mode of mem) == 2, "line start is mode 2 (OAM scan)"]
+lcd_run of [mem, 79]
+assert of [(lcd_mode of mem) == 2, "still mode 2 at cycle 79"]
+lcd_run of [mem, 1]
+assert of [(lcd_mode of mem) == 3, "mode 3 at cycle 80"]
+lcd_run of [mem, 172]
+assert of [(lcd_mode of mem) == 0, "mode 0 (HBlank) at cycle 252"]
+lcd_run of [mem, 204]
+assert of [mem.data[0xFF44] == 1, "LY advances at line end"]
+assert of [(lcd_mode of mem) == 2, "next visible line re-enters mode 2"]
+assert of [mem.lcd_counter == 0, "counter wraps at line end"]
+print of "  lazy mode sequence: ok"
+
+# ---- Events stay 1/line with STAT sources disabled ----
+mem is new_memory of null
+mem.data[0xFF40] is 0x91
+assert of [mem.lcd_next == 456, "no intra-line boundary when HBlank source off"]
+lcd_run of [mem, 300]
+assert of [mem.if_reg == 0, "no interrupts mid-line with sources off"]
+print of "  disabled-source fast path: ok"
+
+# ---- HBlank STAT source arms the 252 boundary (enable bit 3) ----
+mem is new_memory of null
+mem.data[0xFF40] is 0x91
+mem_write of [mem, 0xFF41, 0x08]
+assert of [mem.lcd_next == 252, "arming HBlank source schedules the 252 boundary"]
+lcd_run of [mem, 252]
+assert of [(mem.if_reg & 0x02) != 0, "mode-0 entry fires STAT IRQ when enabled"]
+assert of [mem.lcd_next == 456, "boundary falls back to line end after HBlank"]
+mem.if_reg is 0
+lcd_run of [mem, 204]
+assert of [mem.lcd_next == 252, "next line re-arms the HBlank boundary"]
+print of "  HBlank STAT source: ok"
+
+# ---- OAM (mode 2) STAT source at line start (enable bit 5) ----
+mem is new_memory of null
+mem.data[0xFF40] is 0x91
+mem_write of [mem, 0xFF41, 0x20]
+lcd_run of [mem, 456]
+assert of [(mem.if_reg & 0x02) != 0, "mode-2 entry fires STAT IRQ when enabled"]
+print of "  OAM STAT source: ok"
+
+# ---- VBlank entry: VBlank IF + STAT mode-1 source (enable bit 4) ----
+mem is new_memory of null
+mem.data[0xFF40] is 0x91
+mem_write of [mem, 0xFF41, 0x10]
+mem.data[0xFF44] is 143
+lcd_run of [mem, 456]
+assert of [mem.data[0xFF44] == 144, "LY 144 after line 143"]
+assert of [(lcd_mode of mem) == 1, "mode 1 during VBlank"]
+assert of [(mem.if_reg & 0x01) != 0, "VBlank IF requested"]
+assert of [(mem.if_reg & 0x02) != 0, "STAT mode-1 source fires when enabled"]
+lcd_run of [mem, 456]
+assert of [mem.data[0xFF44] == 145, "VBlank lines advance"]
+assert of [(lcd_mode of mem) == 1, "still mode 1 inside VBlank"]
+print of "  VBlank entry: ok"
+
+# ---- LYC coincidence (enable bit 6) ----
+mem is new_memory of null
+mem.data[0xFF40] is 0x91
+mem_write of [mem, 0xFF41, 0x40]
+mem.data[0xFF45] is 2
+lcd_run of [mem, 456]
+assert of [(mem.if_reg & 0x02) == 0, "no coincidence IRQ at LY 1"]
+lcd_run of [mem, 456]
+assert of [mem.data[0xFF44] == 2, "LY reached LYC"]
+assert of [(mem.if_reg & 0x02) != 0, "LYC coincidence fires STAT IRQ"]
+print of "  LYC coincidence: ok"
+
+# ---- FF41 read composition + write mask (via the bus) ----
+mem is new_memory of null
+mem.data[0xFF40] is 0x91
+mem_write of [mem, 0xFF41, 0xFF]
+assert of [mem.data[0xFF41] == 0x78, "STAT write stores only bits 3-6"]
+mem.data[0xFF45] is 0
+st is mem_read of [mem, 0xFF41]
+assert of [(st & 0x80) != 0, "STAT bit 7 reads 1"]
+assert of [(st & 0x04) != 0, "coincidence bit set when LY==LYC"]
+assert of [(st & 0x03) == 2, "mode bits read live (mode 2)"]
+mem.data[0xFF45] is 5
+st is mem_read of [mem, 0xFF41]
+assert of [(st & 0x04) == 0, "coincidence bit clear when LY!=LYC"]
+print of "  FF41 read/write: ok"
+
+# ---- LYC write re-checks coincidence (enable bit 6) ----
+mem is new_memory of null
+mem.data[0xFF40] is 0x91
+mem_write of [mem, 0xFF41, 0x40]
+mem_write of [mem, 0xFF45, 0x00]
+assert of [(mem.if_reg & 0x02) != 0, "LYC write matching LY fires STAT IRQ"]
+print of "  LYC write check: ok"
+
+# ---- LCD off: LY pinned, mode 0, no IRQs; re-enable restarts ----
+mem is new_memory of null
+mem.data[0xFF40] is 0x91
+mem_write of [mem, 0xFF41, 0x78]
+lcd_run of [mem, 456]
+assert of [mem.data[0xFF44] == 1, "LY advanced while on"]
+mem_write of [mem, 0xFF40, 0x11]
+assert of [mem.data[0xFF44] == 0, "LCD off pins LY to 0"]
+assert of [(lcd_mode of mem) == 0, "LCD off reports mode 0"]
+mem.if_reg is 0
+lcd_run of [mem, 456]
+lcd_run of [mem, 456]
+assert of [mem.data[0xFF44] == 0, "LY stays 0 while off"]
+assert of [mem.if_reg == 0, "no interrupts while off"]
+mem_write of [mem, 0xFF40, 0x91]
+assert of [(lcd_mode of mem) == 2, "re-enable restarts in mode 2"]
+assert of [mem.lcd_counter == 0, "re-enable restarts at phase 0"]
+assert of [mem.lcd_next == 252, "re-enable respects the armed HBlank source"]
+print of "  LCD off/on: ok"
+
+print of ""
+print of "=== All LCD/STAT tests passed ==="

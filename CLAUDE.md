@@ -79,11 +79,13 @@ Select, Escape = quit.
 | `dmg.eigs` | Main loop, timer, interrupts, headless + gfx dispatch |
 | `src/cpu.eigs` | Registers, flags, ALU, rotate/shift, DAA |
 | `src/memory.eigs` | 64KB bus, MBC1/3/5, lazy bank switching, DMA |
+| `src/lcd.eigs` | PPU mode machine + STAT (0xFF41) — lazy mode, event-armed HBlank source |
 | `src/opcodes.eigs` | Full SM83 decoder via `dispatch` table |
 | `src/ppu.eigs` | BG / window / sprite rendering with priority |
 | `src/joypad.eigs` | Button state, FF00 register, interrupt-on-press |
 | `tests/test_cpu.eigs` | 15 CPU unit tests |
 | `tests/test_memory.eigs` | MBC1/3/5, cartridge RAM, echo RAM, DMA |
+| `tests/test_lcd.eigs` | STAT machine: modes, sources, LYC, LCD off/on |
 | `tests/check_twins.sh` | Twin gate — the inlined hot-loop copies must not drift (#20) |
 | `tests/run_blargg_*.sh` | Blargg suite runners (cpu_instrs, timing) |
 | `tests/run_gfx_smoke.sh` | Bounded SDL/dummy-driver gfx smoke |
@@ -110,6 +112,11 @@ Select, Escape = quit.
 - **MBC1 / MBC3 / MBC5** banking is lazy: bank registers update
   pointers, but the resolved offset is recomputed only when the
   bus actually reads/writes the banked region.
+- **The PPU mode is computed, not stepped** (`src/lcd.eigs`). STAT
+  reads derive mode from (LY, lcd_counter); LCD events run once per
+  line, and the intra-line HBlank boundary (cycle 252) is scheduled
+  only while FF41 bit 3 is armed. Event-stepping every mode boundary
+  cost ~2% on the canary — don't regress to it.
 
 ## Hard-won rules
 

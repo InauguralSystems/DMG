@@ -31,5 +31,6 @@ jobs:
             eigenscript tests/test_cpu.eigs
             eigenscript tests/test_memory.eigs
             eigenscript tests/test_ppu.eigs
+            eigenscript tests/test_lcd.eigs
             eigenscript tests/test_joypad.eigs
             tests/run_input_script_smoke.sh

@@ -3,6 +3,7 @@
 # ============================================================
 
 load_file of "src/memory.eigs"
+load_file of "src/lcd.eigs"
 
 print of "=== DMG memory tests ==="
 
@@ -147,13 +148,29 @@ print of "  Echo RAM and DMA: ok"
 
 # ---- LCDC off resets LY immediately (#30) ----
 mem is new_memory of null
+mem.data[0xFF40] is 0x91
 mem.data[0xFF44] is 77
 mem_write of [mem, 0xFF40, 0x11]
 assert of [mem.data[0xFF44] == 0, "LCDC bit7 clear resets LY to 0"]
 assert of [mem.data[0xFF40] == 0x11, "LCDC value stored"]
-mem.data[0xFF44] is 42
 mem_write of [mem, 0xFF40, 0x91]
-assert of [mem.data[0xFF44] == 42, "LCDC on write leaves LY alone"]
+assert of [mem.data[0xFF44] == 0, "LCD re-enable restarts at LY 0"]
+assert of [(lcd_mode of mem) == 2, "LCD re-enable restarts in mode 2 (#15)"]
+mem.data[0xFF44] is 42
+mem_write of [mem, 0xFF40, 0x93]
+assert of [mem.data[0xFF44] == 42, "on->on LCDC write leaves LY alone"]
 print of "  LCDC off LY reset: ok"
+
+# ---- Serial transfer completes: start bit clears, serial IRQ fires (#16) ----
+mem is new_memory of null
+mem_write of [mem, 0xFF01, 65]
+mem_write of [mem, 0xFF02, 0x81]
+assert of [mem.serial_output == "A", "serial byte captured"]
+assert of [(mem.data[0xFF02] & 0x80) == 0, "transfer-start bit cleared on completion"]
+assert of [(mem.if_reg & 0x08) != 0, "serial IRQ requested on completion"]
+mem.if_reg is 0
+mem_write of [mem, 0xFF02, 0x01]
+assert of [mem.if_reg == 0, "non-start FF02 write does not transfer"]
+print of "  serial completion: ok"
 
 print of "\n=== All memory tests passed ==="

@@ -1,0 +1,130 @@
+# ============================================================
+# DMG LCD — PPU mode + STAT register (#15)
+# ============================================================
+# Mode timeline per visible line (456 T-cycles):
+#   mode 2 (OAM scan)     cycles   0..79
+#   mode 3 (transfer)     cycles  80..251   (fixed 172 approximation;
+#                                            real hw varies 168-291)
+#   mode 0 (HBlank)       cycles 252..455
+# Lines 144-153 are mode 1 (VBlank) for the whole line.
+#
+# The mode is COMPUTED from (LY, lcd_counter) on demand — it is not
+# event-stepped state. Events stay at one per line (the line end), with a
+# single extra intra-line boundary at cycle 252 scheduled ONLY while the
+# HBlank STAT source (FF41 bit 3) is enabled — the OAM (bit 5), VBlank
+# (bit 4), and LYC (bit 6) sources all coincide with the line-end event.
+# This keeps the bus-tick fast path at baseline cost when no ROM uses
+# STAT (measured: event-stepping all mode boundaries cost ~2% canary).
+#
+# State in mem fields (unit-testable):
+#   mem.lcd_counter — intra-line T-cycle counter
+#   mem.lcd_next    — next event boundary (252 while HBlank source armed,
+#                     else 456)
+#
+# STAT (0xFF41): bits 0-1 mode (live), bit 2 LY==LYC (live), bits 3-6
+# interrupt-enable selects (writable, stored in mem.data), bit 7 reads 1.
+# STAT IRQ (IF bit 1) fires on mode 0/1/2 entry and on LYC coincidence
+# when the matching enable bit is set. Simple per-source model — the
+# one-interrupt-per-rising-edge "STAT blocking" quirk is not modeled.
+
+LINES_PER_FRAME is 154
+VBLANK_START_LINE is 144
+LCD_MODE2_END is 80
+LCD_MODE3_END is 252
+
+define _stat_source(mem, enable_bit) as:
+    if (mem.data[0xFF41] & enable_bit) != 0:
+        mem.if_reg |= 0x02
+
+# LY==LYC coincidence STAT source (enable bit 6). Called on LY change and
+# LYC writes; the coincidence *flag* itself is computed live on FF41 reads.
+define lyc_check(mem) as:
+    if mem.data[0xFF44] == mem.data[0xFF45]:
+        _stat_source of [mem, 0x40]
+
+# Current PPU mode, computed from LY + intra-line counter.
+define lcd_mode(mem) as:
+    if (mem.data[0xFF40] & 0x80) == 0:
+        return 0
+    if mem.data[0xFF44] >= VBLANK_START_LINE:
+        return 1
+    if mem.lcd_counter < LCD_MODE2_END:
+        return 2
+    if mem.lcd_counter < LCD_MODE3_END:
+        return 3
+    return 0
+
+# Live FF41 read value.
+define stat_read(mem) as:
+    local v is 0x80 | (mem.data[0xFF41] & 0x78) | (lcd_mode of mem)
+    if mem.data[0xFF44] == mem.data[0xFF45]:
+        v |= 0x04
+    return v
+
+# The line boundary schedule: 252 first when the HBlank source is armed.
+define _lcd_line_start_next(mem) as:
+    if (mem.data[0xFF40] & 0x80) != 0 and (mem.data[0xFF41] & 0x08) != 0 and mem.data[0xFF44] < VBLANK_START_LINE:
+        return LCD_MODE3_END
+    return 456
+
+# Drain every LCD event boundary the counter has crossed. Caller (the
+# bus-tick fast path) checks `mem.lcd_counter >= mem.lcd_next` once;
+# instruction/skip granularity never crosses two boundaries at once, but
+# the drain loop keeps this correct regardless.
+define lcd_event(mem) as:
+    loop while mem.lcd_counter >= mem.lcd_next:
+        if mem.lcd_next == LCD_MODE3_END:
+            # HBlank (mode 0) entry — only ever scheduled while enabled,
+            # but re-check: FF41 may have been rewritten mid-line.
+            _stat_source of [mem, 0x08]
+            mem.lcd_next is 456
+            continue
+
+        # Line end.
+        mem.lcd_counter -= 456
+
+        # LCD off: LY pinned at 0, no interrupts — the counter just rolls
+        # so re-enable starts phase-aligned (#30).
+        if (mem.data[0xFF40] & 0x80) == 0:
+            mem.data[0xFF44] is 0
+            mem.lcd_next is 456
+            continue
+
+        local ly is mem.data[0xFF44] + 1
+        if ly >= LINES_PER_FRAME:
+            ly is 0
+        mem.data[0xFF44] is ly
+        if ly == VBLANK_START_LINE:
+            # VBlank entry: the VBlank interrupt itself + STAT mode-1 source
+            mem.if_reg |= 0x01
+            _stat_source of [mem, 0x10]
+        elif ly < VBLANK_START_LINE:
+            # visible line start: mode 2 (OAM scan) entry
+            _stat_source of [mem, 0x20]
+        lyc_check of mem
+        mem.lcd_next is _lcd_line_start_next of mem
+
+# FF41 write: only the enable selects stick; arming/disarming the HBlank
+# source reschedules the current line's boundary.
+define stat_write(mem, val) as:
+    mem.data[0xFF41] is val & 0x78
+    if mem.lcd_counter < LCD_MODE3_END:
+        mem.lcd_next is _lcd_line_start_next of mem
+    else:
+        mem.lcd_next is 456
+
+# FF40 write transition: turning the LCD off pins LY/mode immediately;
+# turning it on restarts from line 0, phase 0.
+define lcd_enable_write(mem, val) as:
+    local was_on is (mem.data[0xFF40] & 0x80) != 0
+    mem.data[0xFF40] is val
+    local now_on is (val & 0x80) != 0
+    if was_on and now_on == 0:
+        mem.data[0xFF44] is 0
+        mem.lcd_counter is 0
+        mem.lcd_next is 456
+    elif now_on and was_on == 0:
+        mem.data[0xFF44] is 0
+        mem.lcd_counter is 0
+        mem.lcd_next is _lcd_line_start_next of mem
+        lyc_check of mem
