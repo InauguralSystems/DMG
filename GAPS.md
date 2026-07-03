@@ -52,7 +52,7 @@ emulator demanded it. This is the whole point of DMG.
 ## GAP-DMG-009: `sort of` silently no-ops on non-numeric lists
 - Found during: full-repo review — sprite X-priority (#26) and input-script event ordering (#25) were both silently unsorted
 - Severity: **Medium** — silent-wrong results, invisible to every test suite
-- Status: **OPEN upstream** — EigenScript#368 (proposal: raise on non-numeric elements instead of comparing as equal)
+- Status: **RESOLVED upstream** — EigenScript#369 (merged 2026-07-03, in the next release after v0.23.0): `sort` raises on mixed/non-scalar elements and sorts all-string lists lexicographically
 - Description: `builtin_sort`'s comparator returns 0 for any non-`VAL_NUM` pair, so sorting a list of records does nothing — and whether input order is even preserved is libc-dependent (qsort gives no stability guarantee for all-equal elements). DMG workaround: `sort_by of [list, key_fn]` (numeric key, stable by original index), which also encodes the DMG equal-X OAM-order tiebreak for free.
 
 ## GAP-DMG-008: VAL_BUFFER not iterable
