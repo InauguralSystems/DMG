@@ -27,6 +27,7 @@ jobs:
         with:
           runCmd: |
             set -e
+            tests/check_twins.sh
             eigenscript tests/test_cpu.eigs
             eigenscript tests/test_memory.eigs
             eigenscript tests/test_ppu.eigs

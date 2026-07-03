@@ -808,6 +808,7 @@ define init_exec_ctx(cpu, mem) as:
     _exec_ctx[1] is mem
 
 define exec_op(cpu, mem) as:
+    # twin: exec copy=exec_op
     cpu.stepped_cycles is 0
     if cpu.halt_bug == 1:
         cpu.halt_bug is 0
@@ -820,4 +821,5 @@ define exec_op(cpu, mem) as:
         cpu.ime_delay -= 1
         if cpu.ime_delay == 0:
             cpu.ime is 1
+    # twin: exec end
     return cycles
