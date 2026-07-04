@@ -217,8 +217,8 @@ assert of [mem.data[0xFF4D] == 0x80, "STOP toggles KEY1 speed bit on"]
 print of "  STOP/KEY1: ok"
 
 # ---- Illegal opcode: hex formatting + default continue (#21) ----
-assert of [(_hex of [0xD3, 2]) == "D3", "hex byte formatting"]
-assert of [(_hex of [0x0123, 4]) == "0123", "hex word formatting pads"]
+assert of [(hex of [0xD3, 2]) == "D3", "hex byte formatting"]
+assert of [(hex of [0x0123, 4]) == "0123", "hex word formatting pads"]
 cpu is new_cpu of null
 mem is new_memory of null
 init_exec_ctx of [cpu, mem]

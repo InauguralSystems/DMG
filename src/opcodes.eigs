@@ -657,23 +657,14 @@ define _op_cb(ctx) as:
 # module would be module-local).
 _strict_illegal is [0]
 
-define _hex(v, nibbles) as:
-    local digits is "0123456789ABCDEF"
-    local out is ""
-    local sh is (nibbles - 1) * 4
-    loop while sh >= 0:
-        out is f"{out}{digits[(v >> sh) & 0x0F]}"
-        sh -= 4
-    return out
-
 define _op_undef(ctx) as:
     local pc is (ctx[0].pc - 1) & 0xFFFF
-    print of f"Undefined opcode 0x{_hex of [ctx[2], 2]} at PC=0x{_hex of [pc, 4]}"
+    print of f"Undefined opcode 0x{hex of [ctx[2], 2]} at PC=0x{hex of [pc, 4]}"
     # Real SM83 locks up on illegal opcodes; default keeps running (a 4-cycle
     # no-op) so a stray byte doesn't kill a play session. --strict-illegal
     # asserts instead, surfacing decoder/ROM faults in development (#21).
     if _strict_illegal[0] == 1:
-        assert of [0, f"illegal opcode 0x{_hex of [ctx[2], 2]} at PC=0x{_hex of [pc, 4]}"]
+        assert of [0, f"illegal opcode 0x{hex of [ctx[2], 2]} at PC=0x{hex of [pc, 4]}"]
     return 4
 
 # ============================================================
