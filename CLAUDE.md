@@ -11,11 +11,12 @@ Two missions, same as the other stress repos:
 1. A real, spec-precise emulator: all Blargg `cpu_instrs` and
    `instr_timing` / `mem_timing` suites green, Tetris and Pokemon
    Red boot under `--gfx`.
-2. **A forcing function for EigenScript.** Eight `GAP-DMG-NNN`
-   primitives have landed upstream because DMG demanded them
+2. **A forcing function for EigenScript.** Ten `GAP-DMG-NNN`
+   entries have landed upstream because DMG demanded them
    (`dispatch` table, native bitwise operators, compound assign,
-   buffer iteration, sign extension, sort, and a loop-condition
-   memory leak fix). See `GAPS.md`.
+   buffer iteration, sign extension, sort — later hardened to
+   raise on non-scalar lists — a loop-condition memory leak fix,
+   and the `hex` builtin). See `GAPS.md`.
 
 Sibling stress repo to EigenGauntlet, EigenMiniSat, EigenRegex,
 and Tidepool.
@@ -91,7 +92,7 @@ Select, Escape = quit.
 | `tests/run_gfx_smoke.sh` | Bounded SDL/dummy-driver gfx smoke |
 | `tests/run_pokemon_red_smoke.sh` | Scripted Pokemon Red smoke |
 | `roms/` | Blargg ROMs + `pokemon-red.gb` (local, gitignored) |
-| `GAPS.md` | `GAP-DMG-NNN` ledger — eight resolved upstream |
+| `GAPS.md` | `GAP-DMG-NNN` ledger — ten resolved upstream |
 | `BASELINE.md` | T3200 timings with methodology + JIT contribution |
 
 ## Architecture notes
