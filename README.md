@@ -16,24 +16,32 @@ Full SM83 CPU core (256 + 256 CB-prefix opcodes), 64KB memory bus with
 MBC1/MBC3/MBC5 ROM and cartridge RAM banking, timer/LCD/VBlank timing, interrupt handling,
 joypad input, and PPU rendering (background, window, sprites with priority).
 
+All Blargg suites pass: `cpu_instrs` (aggregate + individual),
+`instr_timing`, and `mem_timing`.
+
 Runs in two modes:
 - **Headless**: Blargg test ROMs via serial port capture
 - **Graphical**: SDL2 window with keyboard input (`--gfx`)
 
-8 language gaps found and resolved upstream (see `GAPS.md`), including
+10 language gaps found and resolved upstream (see `GAPS.md`), including
 dispatch tables, native bitwise operators, compound assignment, buffer
-iteration, sign extension, sort, and loop condition memory leak fixes.
+iteration, sign extension, sort (later hardened to raise on non-scalar
+lists), loop condition memory leak fixes, and a hex formatting builtin.
 
 ## Architecture
 
 - `src/cpu.eigs` — Registers, flags, ALU operations, rotate/shift, DAA
 - `src/memory.eigs` — 64KB address space, MBC1/MBC3/MBC5, lazy bank switching, DMA
+- `src/lcd.eigs` — PPU mode machine + STAT (0xFF41) timing
 - `src/opcodes.eigs` — Full SM83 instruction decoder via `dispatch`
 - `src/ppu.eigs` — Pixel Processing Unit: BG/window/sprite rendering
 - `src/joypad.eigs` — Button state, FF00 register, interrupt on press
 - `dmg.eigs` — Main loop, timer, interrupts, graphical + headless modes
-- `tests/test_cpu.eigs` — 15 CPU unit tests
+- `tests/test_cpu.eigs` — 17 CPU unit tests
 - `tests/test_memory.eigs` — MBC1/MBC3/MBC5, cartridge RAM, echo RAM, and DMA tests
+- `tests/test_lcd.eigs` — STAT machine: modes, sources, LYC, LCD off/on
+- `tests/test_ppu.eigs` — Sprite X-priority rendering
+- `tests/test_joypad.eigs` — P1 column-gated interrupt
 
 ## Usage
 
@@ -67,6 +75,7 @@ Keys: arrows = D-pad, Z = A, X = B, Return = Start, Backspace = Select, Escape =
 
 ## Goal
 
-Pass Blargg's `cpu_instrs` test ROM, then run Tetris and Pokemon Red.
+Blargg's `cpu_instrs` test ROM passes; the remaining aspiration is full
+game compatibility — running Tetris and Pokemon Red under `--gfx`.
 Each blocker found along the way becomes a language gap, and each language
 gap becomes the next upstream EigenScript feature.

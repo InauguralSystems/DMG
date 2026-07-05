@@ -26,5 +26,5 @@ steps to reproduce and the affected EigenScript version.
 ## Supported versions
 
 The latest commit on `master` is supported. `DMG` tracks a pinned EigenScript
-version (see `.devcontainer/Dockerfile`'s `EIGS_REF`, currently v0.21.2); run
-against that or newer.
+version (see `.devcontainer/Dockerfile`'s `EIGS_REF`); run against that pin or
+newer.

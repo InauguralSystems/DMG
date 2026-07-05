@@ -64,5 +64,5 @@ emulator demanded it. This is the whole point of DMG.
 ## GAP-DMG-010: No hex formatting builtin
 - Found during: illegal-opcode diagnostics (#21) — PC/opcode want `0x`-hex output
 - Severity: **Low** — cold error paths only
-- Status: **RESOLVED upstream** — `hex of n` / `hex of [n, nibbles]` builtin (EigenScript PR #375, 2026-07-03): uppercase, zero-padded, raises on negative/fractional/non-number. The local `_hex` helper can be dropped at the next runtime-pin bump
+- Status: **RESOLVED upstream** — `hex of n` / `hex of [n, nibbles]` builtin (EigenScript PR #375, 2026-07-03): uppercase, zero-padded, raises on negative/fractional/non-number. The local `_hex` helper was dropped at the v0.24.0 pin bump
 - Description: f-strings interpolate decimal only; there is no `hex of v` / format-width builtin (`random_hex` exists but generates, not formats). Any emulator or systems tool wants hex for addresses/registers — EigenOS's REPL and DMG diagnostics both hand-roll it. Candidate upstream shape: `hex of v` or `format of [v, "04X"]`.

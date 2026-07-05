@@ -84,9 +84,12 @@ Select, Escape = quit.
 | `src/opcodes.eigs` | Full SM83 decoder via `dispatch` table |
 | `src/ppu.eigs` | BG / window / sprite rendering with priority |
 | `src/joypad.eigs` | Button state, FF00 register, interrupt-on-press |
-| `tests/test_cpu.eigs` | 15 CPU unit tests |
+| `tests/test_cpu.eigs` | 17 CPU unit tests |
 | `tests/test_memory.eigs` | MBC1/3/5, cartridge RAM, echo RAM, DMA |
 | `tests/test_lcd.eigs` | STAT machine: modes, sources, LYC, LCD off/on |
+| `tests/test_ppu.eigs` | Sprite X-priority rendering (#26) |
+| `tests/test_joypad.eigs` | P1 column-gated interrupt (#33) |
+| `tests/run_input_script_smoke.sh` | Input-script cycle-order smoke (#25) |
 | `tests/check_twins.sh` | Twin gate — the inlined hot-loop copies must not drift (#20) |
 | `tests/run_blargg_*.sh` | Blargg suite runners (cpu_instrs, timing) |
 | `tests/run_gfx_smoke.sh` | Bounded SDL/dummy-driver gfx smoke |

@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Accuracy
+- STAT register + LCD mode machine and serial-complete IRQ
+- Window internal line counter, P1 upper bits, and illegal-opcode hex
+  diagnostics; reload-window cap, LCD-off, STOP, and joypad IRQ fixes
+- MBC1 mode-1 bank0 remap fix in `fetch8`
+
+### Fixed
+- Replaced silent no-op `sort of` with `sort_by` at both record-sort
+  sites (sprite X-priority and input-script event ordering)
+
+### Tooling
+- Twin gate in CI (`tests/check_twins.sh`) — the inlined hot-loop copies
+  must not drift
+- Pinned EigenScript runtime bumped v0.23.0 → v0.26.0
+
 ## [0.1.0] — 2026-07-01
 
 ### Accuracy
