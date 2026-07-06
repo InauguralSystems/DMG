@@ -337,7 +337,10 @@ define mem_write(mem, addr, val) as:
     if addr == 0xFF02:
         if val == 0x81:
             ch is mem.data[0xFF01]
-            mem.serial_output is f"{mem.serial_output}{chr of ch}"
+            # chr raises on 0 (post-#435); a NUL transfer appends nothing,
+            # byte-identical to the old silent-"" behavior.
+            if ch != 0:
+                mem.serial_output is f"{mem.serial_output}{chr of ch}"
             # Transfer completes immediately: clear the start bit and
             # request the serial interrupt (#16). Real hw takes ~4096
             # T-cycles per byte; instant completion only makes back-to-back
