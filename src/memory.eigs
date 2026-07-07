@@ -1,3 +1,4 @@
+# lint: loaded-by ../dmg.eigs -- module fragment: dmg.eigs composes the siblings (#460)
 # ============================================================
 # DMG Memory — 64KB address space with memory-mapped I/O
 # ============================================================

@@ -1,3 +1,4 @@
+# lint: loaded-by ../dmg.eigs -- module fragment: dmg.eigs composes the siblings (#460)
 # ============================================================
 # DMG Opcodes — SM83 instruction decoder via dispatch table
 # ============================================================

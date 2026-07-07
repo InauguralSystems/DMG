@@ -1,3 +1,4 @@
+# lint: loaded-by ../dmg.eigs -- module fragment: dmg.eigs composes the siblings (#460)
 # ============================================================
 # DMG CPU — Sharp SM83 (Game Boy CPU core)
 # ============================================================
