@@ -14,7 +14,7 @@ jobs:
     name: unit tests (in devcontainer)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       # Build the devcontainer (EigenScript pinned by .devcontainer/Dockerfile's
       # EIGS_REF — replaces the old clone-HEAD step that pinned nothing) and run
