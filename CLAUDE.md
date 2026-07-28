@@ -57,6 +57,9 @@ tests/run_blargg_cpu_instrs_suite.sh
 # Blargg instr_timing + mem_timing (the accuracy-sensitive ones)
 tests/run_blargg_timing_suite.sh
 
+# Input-script cycle-order smoke (#25) — a CI gate
+tests/run_input_script_smoke.sh
+
 # Standard regression-tracking canary — 500K cycles, low variance
 $EIGS dmg.eigs roms/cpu_instrs.gb --cycles 500000
 
@@ -75,28 +78,16 @@ Select, Escape = quit.
 
 ## Layout
 
-| Path | Role |
-|---|---|
-| `dmg.eigs` | Main loop, timer, interrupts, headless + gfx dispatch |
-| `src/cpu.eigs` | Registers, flags, ALU, rotate/shift, DAA |
-| `src/memory.eigs` | 64KB bus, MBC1/3/5, lazy bank switching, DMA |
-| `src/lcd.eigs` | PPU mode machine + STAT (0xFF41) — lazy mode, event-armed HBlank source |
-| `src/opcodes.eigs` | Full SM83 decoder via `dispatch` table |
-| `src/ppu.eigs` | BG / window / sprite rendering with priority |
-| `src/joypad.eigs` | Button state, FF00 register, interrupt-on-press |
-| `tests/test_cpu.eigs` | 17 CPU unit tests |
-| `tests/test_memory.eigs` | MBC1/3/5, cartridge RAM, echo RAM, DMA |
-| `tests/test_lcd.eigs` | STAT machine: modes, sources, LYC, LCD off/on |
-| `tests/test_ppu.eigs` | Sprite X-priority rendering (#26) |
-| `tests/test_joypad.eigs` | P1 column-gated interrupt (#33) |
-| `tests/run_input_script_smoke.sh` | Input-script cycle-order smoke (#25) |
-| `tests/check_twins.sh` | Twin gate — the inlined hot-loop copies must not drift (#20) |
-| `tests/run_blargg_*.sh` | Blargg suite runners (cpu_instrs, timing) |
-| `tests/run_gfx_smoke.sh` | Bounded SDL/dummy-driver gfx smoke |
-| `tests/run_pokemon_red_smoke.sh` | Scripted Pokemon Red smoke |
-| `roms/` | Blargg ROMs + `pokemon-red.gb` (local, gitignored) |
-| `GAPS.md` | `GAP-DMG-NNN` ledger — ten resolved upstream |
-| `BASELINE.md` | T3200 timings with methodology + JIT contribution |
+(`ls src/ tests/` for the file inventory — names match subsystems. The parts
+that aren't obvious:)
+
+- `src/lcd.eigs` — PPU mode machine + STAT (0xFF41): **lazy mode,
+  event-armed HBlank source**.
+- `tests/check_twins.sh` — the twin gate: the inlined hot-loop copies must
+  not drift (#20).
+- `roms/` — Blargg ROMs + `pokemon-red.gb`, local and gitignored.
+- `GAPS.md` — the `GAP-DMG-NNN` ledger (ten resolved upstream).
+- `BASELINE.md` — T3200 timings with methodology + JIT contribution.
 
 ## Architecture notes
 
