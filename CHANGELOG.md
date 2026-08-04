@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Debugger — memory panel (#53, second artifact)
+- South `hex_view` panel over the live bus (pure reader, whole 64K,
+  opens at the stack); click a byte → `DBG_SELECT addr value` from
+  `mem_read` directly. Pause seam emits the visible window
+  (`DBG_MEMGEOM`/`DBG_MEM`) read straight off the core, independent of
+  the widget's render reader — `--plant-mem-fault` corrupts only the
+  render leg and the decode oracle must catch it (it does, 1 cell).
+- `tests/ui_debug_oracle.py` grew the memory-panel legs: hex cells
+  decoded from screenshots vs the `DBG_MEM` seam, a real-pointer byte
+  click verified against `DBG_SELECT`, and the planted mem fault.
+
 ### Debugger (#53, fleet UI ladder rung 5 slice 3, first artifact)
 - `--debug` opens a dock-workspace debugger chrome (needs the dock
   widget — EigenScript main post-v0.37.0): center = live LCD, west =

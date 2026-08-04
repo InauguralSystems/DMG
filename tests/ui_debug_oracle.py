@@ -168,8 +168,9 @@ class Chrome:
     def read_log(self):
         return open(self.log).read()
 
-    def wait_dumps(self, n, reason=None, timeout=45):
-        """Wait for n complete dump blocks; return the n-th's lines.
+    def wait_blocks(self, n, reason=None, timeout=45):
+        """Wait for n complete pause blocks; return the n-th as
+        (dump_lines, raw_block_text).
 
         With reason set, the n-th block's '=== DBG PAUSE (reason) ==='
         header must match — a click that hit the wrong control emits the
@@ -178,18 +179,21 @@ class Chrome:
         t0 = time.time()
         while time.time() - t0 < timeout:
             txt = self.read_log()
-            blocks = re.findall(r"=== DBG PAUSE \((\w+)\) ===.*?"
+            blocks = re.findall(r"=== DBG PAUSE \((\w+)\) ===\n(.*?)"
                                 r"=== STATE DUMP ===\n(.*?)\n=== END DUMP ===",
                                 txt, re.S)
             if len(blocks) >= n:
-                got_reason, body = blocks[n - 1]
+                got_reason, pre, body = blocks[n - 1]
                 if reason is not None and got_reason != reason:
                     raise RuntimeError("dump #%d reason %r, expected %r"
                                        % (n, got_reason, reason))
-                return body.split("\n")
+                return body.split("\n"), pre
             time.sleep(0.3)
         raise RuntimeError("dump #%d never appeared; log tail:\n%s"
                            % (n, self.read_log()[-800:]))
+
+    def wait_dumps(self, n, reason=None, timeout=45):
+        return self.wait_blocks(n, reason, timeout)[0]
 
     def count_dumps(self):
         return len(re.findall(r"=== END DUMP ===", self.read_log()))
@@ -215,6 +219,17 @@ class Chrome:
         time.sleep(0.2)
         subprocess.run(["xdotool", "click", "1"], env=ENV)
 
+    def wait_select(self, timeout=10):
+        """Last DBG_SELECT (addr, value) emitted by a byte click."""
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            m = re.findall(r"^DBG_SELECT ([0-9A-Fa-f]{4}) ([0-9A-Fa-f]{2})$",
+                           self.read_log(), re.M)
+            if m:
+                return m[-1]
+            time.sleep(0.2)
+        raise RuntimeError("no DBG_SELECT after byte click")
+
     def shot(self):
         time.sleep(0.6)   # let the post-event frame present
         return screenshot(self.wid, self.tmp)
@@ -226,6 +241,51 @@ class Chrome:
         except subprocess.TimeoutExpired:
             self.proc.kill()
         self.f.close()
+
+
+def parse_mem(block_text):
+    """DBG_MEMGEOM + DBG_MEM rows out of a pause block."""
+    g = re.search(r"^DBG_MEMGEOM (\d+) (\d+) (\d+) (\d+) (\d+)$",
+                  block_text, re.M)
+    if not g:
+        raise RuntimeError("no DBG_MEMGEOM in pause block")
+    gutter, cell_w, half_gap, cw, row_h = (int(v) for v in g.groups())
+    rows = [(int(dy), addr, hx) for dy, addr, hx in
+            re.findall(r"^DBG_MEM (\d+) ([0-9A-Fa-f]{4}) ([0-9A-Fa-f]+)$",
+                       block_text, re.M)]
+    if not rows:
+        raise RuntimeError("no DBG_MEM rows in pause block")
+    return {"gutter": gutter, "cell_w": cell_w, "half_gap": half_gap,
+            "cw": cw, "row_h": row_h, "rows": rows}
+
+
+def check_mem_panel(chrome, atlas, block_text, label, img=None):
+    """Decode the memory panel's hex cells and diff vs the DBG_MEM seam."""
+    mx, my, mw, mh = chrome.geom("mem")
+    m = parse_mem(block_text)
+    if img is None:
+        img = chrome.shot()
+    px = img.load()
+    bad = []
+    for dy, addr, hx in m["rows"]:
+        for ci in range(len(hx) // 2):
+            cx = mx + m["gutter"] + ci * m["cell_w"]
+            if ci >= 8:
+                cx += m["half_gap"]
+            cy = my + dy
+            got = (atlas.get(cell_sig(px, cx, cy), "?")
+                   + atlas.get(cell_sig(px, cx + m["cw"], cy), "?"))
+            want = hx[ci * 2:ci * 2 + 2]
+            if got != want:
+                bad.append((addr, ci, want, got))
+    if bad:
+        print("FAIL: %s — %d/%d memory cells diverge (first: %s+%d want %r got %r)"
+              % (label, len(bad), len(m["rows"]) * 16,
+                 bad[0][0], bad[0][1], bad[0][2], bad[0][3]))
+        return False
+    print("PASS: %s — %d memory rows decode byte-identical"
+          % (label, len(m["rows"])))
+    return True
 
 
 def check_panel(chrome, atlas, dump_lines, label):
@@ -253,8 +313,9 @@ def main():
     # ---- phases 1+2: break-pause decode, then real-input stepping ----
     c = Chrome(tmp, ["--break-cycle", "400000"])
     try:
-        d1 = c.wait_dumps(1, reason="paused")
+        d1, b1 = c.wait_blocks(1, reason="paused")
         ok &= check_panel(c, atlas, d1, "auto-break pause")
+        ok &= check_mem_panel(c, atlas, b1, "auto-break memory panel")
 
         # Click-away guard: a click on the LCD center must not step/dump.
         rx, ry, rw, rh = c.geom("regs")
@@ -265,6 +326,35 @@ def main():
             ok = False
         else:
             print("PASS: click-away is inert")
+
+        # Byte click: real pointer on a nonzero cell; DBG_SELECT (core
+        # leg, mem_read direct) must name that exact addr and value.
+        mx, my, mw, mh = c.geom("mem")
+        m = parse_mem(b1)
+        target = None
+        for dy, addr, hx in m["rows"]:
+            for ci in range(len(hx) // 2):
+                if hx[ci * 2:ci * 2 + 2] != "00":
+                    target = (dy, addr, ci, hx[ci * 2:ci * 2 + 2])
+                    break
+            if target:
+                break
+        if target is None:
+            target = (m["rows"][0][0], m["rows"][0][1], 0,
+                      m["rows"][0][2][0:2])
+        dy, addr, ci, want_val = target
+        cx = mx + m["gutter"] + ci * m["cell_w"] + m["cell_w"] // 2 - 1
+        if ci >= 8:
+            cx += m["half_gap"]
+        c.click_at(cx, my + dy + m["row_h"] // 2 - 1)
+        sel_addr, sel_val = c.wait_select()
+        want_addr = "%04X" % (int(addr, 16) + ci)
+        if (sel_addr.upper(), sel_val.upper()) != (want_addr, want_val.upper()):
+            print("FAIL: byte click selected %s=%s, wanted %s=%s"
+                  % (sel_addr, sel_val, want_addr, want_val))
+            ok = False
+        else:
+            print("PASS: byte click selects %s = %s" % (sel_addr, sel_val))
 
         c.click("btn_step")
         d2 = c.wait_dumps(2, reason="step")
@@ -279,12 +369,13 @@ def main():
         c.click("btn_pause")          # Run (resume)
         time.sleep(1.0)               # emulate a bit
         c.click("btn_pause")          # Pause again
-        d3 = c.wait_dumps(3, reason="paused")
+        d3, b3 = c.wait_blocks(3, reason="paused")
         cyc3 = int(d3[0].split("=")[1])
         if not (cyc3 > cyc2):
             print("FAIL: Run/Pause round-trip did not advance CYC")
             ok = False
         ok &= check_panel(c, atlas, d3, "after mouse Run->Pause (CYC %d)" % cyc3)
+        ok &= check_mem_panel(c, atlas, b3, "post-resume memory panel")
     finally:
         c.close()
 
@@ -301,6 +392,18 @@ def main():
             ok = False
         else:
             print("PASS: planted render fault caught")
+    finally:
+        c.close()
+
+    # ---- phase 4: the planted MEMORY fault MUST be caught ----
+    c = Chrome(tmp, ["--break-cycle", "400000", "--plant-mem-fault"])
+    try:
+        _, b = c.wait_blocks(1, reason="paused")
+        if check_mem_panel(c, atlas, b, "(plant probe, must fail)"):
+            print("FAIL: planted mem fault NOT caught — the mem checker is blind")
+            ok = False
+        else:
+            print("PASS: planted mem fault caught")
     finally:
         c.close()
 
