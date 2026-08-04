@@ -607,7 +607,19 @@ define run_frame(cpu, mem) as:
 
     return frame_cycles
 
-if gfx_mode == 1:
+# Debugger chrome (#53): dock UI around the LCD. Loaded lazily so plain
+# gfx and headless runs never touch lib/ui (and run on a lib without it).
+if gfx_mode == 1 and debug_mode == 1:
+    ppu is new_ppu of null
+    ppu.frame_skip is 1
+    _gfx_ppu is ppu
+    joy is new_joypad of null
+    mem.joypad is joy
+    load_file of "lib/ui.eigs"
+    load_file of "debugger.eigs"
+    total_cycles is debugger_run of [cpu, mem, ppu, joy, gfx_scale, break_cycle, gfx_frame_limit]
+    print of f"\nDebugger exited: cycles={total_cycles} frames={ppu.frame_count}"
+elif gfx_mode == 1:
     ppu is new_ppu of null
     ppu.frame_skip is frameskip
     _gfx_ppu is ppu

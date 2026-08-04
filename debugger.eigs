@@ -1,0 +1,199 @@
+# lint: loaded-by dmg.eigs -- module fragment: dmg.eigs loads src/ + lib/ui.eigs before this file runs
+# Debugger chrome (#53, fleet UI ladder rung 5 slice 3, first artifact) —
+# a dock workspace around the LCD: center = the live LCD surface, west =
+# registers panel + pause/step controls.
+#
+# The chrome is a PURE READER of the emulator: RUN drives the same
+# run_frame the plain gfx mode uses (full hot-loop speed), STEP drives
+# debug_step_instr (src/debug.eigs), and the registers panel text IS
+# debug_regs_text — the same formatter the --dump-state oracle prints.
+# What makes that non-vacuous is the render-decode oracle
+# (tests/ui_debug_oracle.py): it reads the panel back OUT OF THE PIXELS
+# and diffs against the core's stdout dump, so a render fault (dropped
+# line, wrong glyph, stale text) fails the diff even though both sides
+# share the formatter. Every pause/step emits the dump + panel geometry
+# on stdout — that is the harness seam, not debug spam.
+#
+# Conventions (the liferaft visualizer / eigen-edit shape): loaded after
+# src/*.eigs and lib/ui.eigs; `debugger_run` is defined but never called
+# at load time; all mutable chrome state lives in the DBG dict (field
+# writes cross the module boundary, bare rebinds do not — EigenScript#373).
+
+DBG is {
+    "cpu": null,
+    "mem": null,
+    "ppu": null,
+    "joy": null,
+    "scale": 2,
+    "paused": 0,
+    "total": 0,
+    "break_cycle": -1,
+    "broke": 0,
+    "geom_printed": 0,
+    "dk": null,
+    "tick_count": 0,
+    "tick_limit": 0,
+    "regs_cv": null,
+    "btn_pause": null,
+    "btn_step": null,
+    "btn_frame": null
+}
+
+define _dbg_refresh_regs() as:
+    DBG.regs_cv.text is debug_regs_text of [DBG.cpu, DBG.mem, DBG.total]
+
+define _dbg_render_fb() as:
+    ppu_render_frame of [DBG.mem.data, DBG.ppu.fb]
+
+# Pause/step acceptance seam: geometry + the canonical dump on stdout.
+define _dbg_emit_state(reason) as:
+    local dkv is dock_view of DBG.dk
+    local rb is dkv.panels.west[0].body
+    print of f"=== DBG PAUSE ({reason}) ==="
+    print of f"DBG_GEOM regs {rb[0]} {rb[1]} {rb[2]} {rb[3]}"
+    print of "=== STATE DUMP ==="
+    print of (debug_state_dump of [DBG.cpu, DBG.mem, DBG.total])
+    print of "=== END DUMP ==="
+
+define _dbg_set_paused(v) as:
+    DBG.paused is v
+    if v == 1:
+        DBG.btn_pause.label is "Run"
+        _dbg_refresh_regs of null
+        _dbg_emit_state of "paused"
+    else:
+        DBG.btn_pause.label is "Pause"
+
+define _dbg_click_pause(b) as:
+    if DBG.paused == 1:
+        _dbg_set_paused of 0
+    else:
+        _dbg_set_paused of 1
+
+define _dbg_step_instr() as:
+    DBG.total += debug_step_instr of [DBG.cpu, DBG.mem]
+    _dbg_render_fb of null
+    _dbg_refresh_regs of null
+    _dbg_emit_state of "step"
+
+define _dbg_step_frame() as:
+    DBG.total += run_frame of [DBG.cpu, DBG.mem]
+    _dbg_render_fb of null
+    _dbg_refresh_regs of null
+    _dbg_emit_state of "frame"
+
+define _dbg_click_step(b) as:
+    if DBG.paused == 1:
+        _dbg_step_instr of null
+
+define _dbg_click_frame(b) as:
+    if DBG.paused == 1:
+        _dbg_step_frame of null
+
+define _lcd_paint(cv, ax, ay) as:
+    local s is DBG.scale
+    gfx_clip of [ax, ay, cv.w, cv.h]
+    gfx_rect of [ax, ay, cv.w, cv.h, 8, 8, 12]
+    local ox is ax + (floor of ((cv.w - (160 * s)) / 2))
+    local oy is ay + (floor of ((cv.h - (144 * s)) / 2))
+    if ox < ax:
+        ox is ax
+    if oy < ay:
+        oy is ay
+    gfx_fb of [DBG.ppu.fb, 160, 144, ox, oy, s]
+    gfx_clip of null
+
+define _dbg_tick(root) as:
+    # Bounded run for the headless smoke (--gfx-frames): ticks, not
+    # emulated frames, so it also terminates while paused.
+    DBG.tick_count += 1
+    if DBG.tick_limit > 0 and DBG.tick_count > DBG.tick_limit:
+        request_quit of null
+        return null
+    if DBG.paused == 0:
+        DBG.total += run_frame of [DBG.cpu, DBG.mem]
+        DBG.ppu.frame_count += 1
+        _dbg_render_fb of null
+        _dbg_refresh_regs of null
+        if DBG.break_cycle >= 0 and DBG.broke == 0 and DBG.total >= DBG.break_cycle:
+            DBG.broke is 1
+            _dbg_set_paused of 1
+    # One-shot geometry report for the mouse oracle, after the first
+    # layout pass has stamped absolute positions.
+    if DBG.geom_printed == 0 and DBG.btn_pause._ax != null:
+        DBG.geom_printed is 1
+        local bp is DBG.btn_pause
+        local bs is DBG.btn_step
+        local bf is DBG.btn_frame
+        print of f"DBG_GEOM btn_pause {bp._ax} {bp._ay} {bp.w} {bp.h}"
+        print of f"DBG_GEOM btn_step {bs._ax} {bs._ay} {bs.w} {bs.h}"
+        print of f"DBG_GEOM btn_frame {bf._ax} {bf._ay} {bf.w} {bf.h}"
+
+define _dbg_on_key(ev) as:
+    if ev.type == "keydown":
+        if ev.key == "escape":
+            return 0
+        if ev.key == "space":
+            _dbg_click_pause of null
+            return 1
+        if ev.key == "s" and DBG.paused == 1:
+            _dbg_step_instr of null
+            return 1
+        if ev.key == "f" and DBG.paused == 1:
+            _dbg_step_frame of null
+            return 1
+        joypad_update of [DBG.joy, DBG.mem, ev]
+        return 1
+    if ev.type == "keyup":
+        joypad_update of [DBG.joy, DBG.mem, ev]
+    return 1
+
+define debugger_run(cpu, mem, ppu, joy, scale, break_cycle, tick_limit) as:
+    DBG.cpu is cpu
+    DBG.mem is mem
+    DBG.ppu is ppu
+    DBG.joy is joy
+    DBG.scale is scale
+    DBG.break_cycle is break_cycle
+    DBG.tick_limit is tick_limit
+
+    local west_w is 210
+    local win_w is west_w + 5 + (160 * scale) + 24
+    local win_h is (144 * scale) + 24
+    if win_h < 460:
+        win_h is 460
+
+    local dk is dock of ["dock", 0, 0, win_w, win_h]
+    dk.west_w is west_w
+    DBG.dk is dk
+
+    local lcd is canvas of ["lcd", 0, 0, 10, 10, _lcd_paint, null]
+    dock_set_center of [dk, lcd]
+
+    local regs_cv is code_view of ["regs", 0, 0, 10, 10, ""]
+    regs_cv.line_numbers is 0
+    DBG.regs_cv is regs_cv
+    dock_add of [dk, "west", dock_panel of ["registers", regs_cv]]
+
+    local controls is vbox of ["controls", 0, 0, 10, 10]
+    controls.padding is 8
+    controls.gap is 6
+    local btn_pause is button of ["btn_pause", 0, 0, 180, 28, "Pause", _dbg_click_pause]
+    local btn_step is button of ["btn_step", 0, 0, 180, 28, "Step instr [s]", _dbg_click_step]
+    local btn_frame is button of ["btn_frame", 0, 0, 180, 28, "Step frame [f]", _dbg_click_frame]
+    DBG.btn_pause is btn_pause
+    DBG.btn_step is btn_step
+    DBG.btn_frame is btn_frame
+    append of [controls.children, btn_pause]
+    append of [controls.children, btn_step]
+    append of [controls.children, btn_frame]
+    dock_add of [dk, "west", dock_panel of ["controls", controls]]
+
+    _dbg_render_fb of null
+    _dbg_refresh_regs of null
+
+    gfx_open of [win_w, win_h, "DMG debugger"]
+    print of f"Debugger chrome: {win_w}x{win_h} (scale {scale})"
+    app_loop of [dk, _dbg_on_key, _dbg_tick]
+    gfx_close of null
+    return DBG.total
