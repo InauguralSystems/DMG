@@ -218,6 +218,7 @@ engine is "hot"
 debug_mode is 0
 break_cycle is -1
 plant_render_fault is 0
+plant_mem_fault is 0
 
 i is 1
 loop while i < (len of argv):
@@ -255,6 +256,8 @@ loop while i < (len of argv):
         break_cycle is floor of (num of argv[i])
     elif argv[i] == "--plant-render-fault":
         plant_render_fault is 1
+    elif argv[i] == "--plant-mem-fault":
+        plant_mem_fault is 1
     i += 1
 
 # sort_by key for input events [cycle, button, state]. apply_input_events
@@ -621,6 +624,7 @@ if gfx_mode == 1 and debug_mode == 1:
     load_file of "lib/ui.eigs"
     load_file of "debugger.eigs"
     DBG.plant_fault is plant_render_fault
+    DBG.plant_mem is plant_mem_fault
     total_cycles is debugger_run of [cpu, mem, ppu, joy, gfx_scale, break_cycle, gfx_frame_limit]
     print of f"\nDebugger exited: cycles={total_cycles} frames={ppu.frame_count}"
 elif gfx_mode == 1:

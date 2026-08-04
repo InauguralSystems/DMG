@@ -19,6 +19,11 @@
 # at load time; all mutable chrome state lives in the DBG dict (field
 # writes cross the module boundary, bare rebinds do not — EigenScript#373).
 
+# Initial memory-panel window: top of WRAM around the stack — live,
+# nonzero bytes (an all-zero window would let a stuck-at-zero renderer
+# pass the decode oracle). Also the planted mem fault's target byte.
+DBG_MEM_HOME is 0xDF40
+
 DBG is {
     "cpu": null,
     "mem": null,
@@ -34,14 +39,27 @@ DBG is {
     "tick_count": 0,
     "tick_limit": 0,
     "regs_cv": null,
+    "mem_hv": null,
     "btn_pause": null,
     "btn_step": null,
     "btn_frame": null,
     # --plant-render-fault (oracle validation only): corrupt the PANEL
     # text while the stdout dump stays truthful — the render-decode
     # checker MUST catch the divergence or it proves nothing.
-    "plant_fault": 0
+    "plant_fault": 0,
+    # --plant-mem-fault: corrupt one byte in the memory panel's RENDER
+    # reader while the DBG_MEM seam (mem_read direct) stays truthful.
+    "plant_mem": 0
 }
+
+# The memory panel's reader — the RENDER leg. The DBG_MEM/DBG_SELECT
+# seams deliberately bypass it and call mem_read directly (the CORE
+# leg), so a fault planted here diverges the two and must be caught.
+define _dbg_mem_reader(addr) as:
+    local b is mem_read of [DBG.mem, addr]
+    if DBG.plant_mem == 1 and addr == DBG_MEM_HOME:
+        return b ^ 0x40
+    return b
 
 define _dbg_refresh_regs() as:
     local t is debug_regs_text of [DBG.cpu, DBG.mem, DBG.total]
@@ -56,14 +74,51 @@ define _dbg_render_fb() as:
     ppu_render_frame of [DBG.mem.data, DBG.ppu.fb]
 
 # Pause/step acceptance seam: geometry + the canonical dump on stdout.
+# The memory window rows mirror the hex_view render's whole-row
+# selection through the shared hex_view_metrics seam, but read the bus
+# via mem_read DIRECTLY — the render goes through _dbg_mem_reader, so
+# the two legs are independent (that independence is what the planted
+# mem fault validates).
+define _dbg_emit_mem(mv) as:
+    local m is hex_view_metrics of mv
+    print of f"DBG_MEMGEOM {m.gutter} {m.cell_w} {m.half_gap} {m.cw} {m.row_h}"
+    local r0 is floor of (mv.scroll_y / m.row_h)
+    if r0 < 0:
+        r0 is 0
+    local rn is r0 + (ceil of (mv.h / m.row_h)) + 1
+    local nrows is ceil of (mv.size / m.bpr)
+    if rn > nrows:
+        rn is nrows
+    for ri in range of [r0, rn]:
+        local dy is 2 + (ri * m.row_h) - mv.scroll_y
+        if dy < 1:
+            continue
+        if dy + m.row_h > mv.h - 1:
+            continue
+        local addr0 is ri * m.bpr
+        local hx is ""
+        for ci in range of m.bpr:
+            local a is addr0 + ci
+            if a < mv.size:
+                hx is hx + (hex of [mem_read of [DBG.mem, a], 2])
+        print of f"DBG_MEM {dy} {hex of [addr0, 4]} {hx}"
+
 define _dbg_emit_state(reason) as:
     local dkv is dock_view of DBG.dk
     local rb is dkv.panels.west[0].body
     print of f"=== DBG PAUSE ({reason}) ==="
     print of f"DBG_GEOM regs {rb[0]} {rb[1]} {rb[2]} {rb[3]}"
+    if DBG.mem_hv != null:
+        local mb is dkv.panels.south[0].body
+        print of f"DBG_GEOM mem {mb[0]} {mb[1]} {mb[2]} {mb[3]}"
+        _dbg_emit_mem of DBG.mem_hv
     print of "=== STATE DUMP ==="
     print of (debug_state_dump of [DBG.cpu, DBG.mem, DBG.total])
     print of "=== END DUMP ==="
+
+# USER clicks only (the #842 gesture contract). Core leg: mem_read.
+define _dbg_mem_select(hv, addr) as:
+    print of f"DBG_SELECT {hex of [addr, 4]} {hex of [mem_read of [DBG.mem, addr], 2]}"
 
 # A clicked button keeps toolkit focus, and the focus path re-fires a
 # focused button on space/return ON TOP of our key handler (app_loop
@@ -180,13 +235,17 @@ define debugger_run(cpu, mem, ppu, joy, scale, break_cycle, tick_limit) as:
     DBG.tick_limit is tick_limit
 
     local west_w is 210
+    local south_h is 200
     local win_w is west_w + 5 + (160 * scale) + 24
     local win_h is (144 * scale) + 24
     if win_h < 460:
         win_h is 460
+    # South band rides below the band the LCD + west stack need.
+    win_h is win_h + south_h + 5
 
     local dk is dock of ["dock", 0, 0, win_w, win_h]
     dk.west_w is west_w
+    dk.south_h is south_h
     DBG.dk is dk
 
     local lcd is canvas of ["lcd", 0, 0, 10, 10, _lcd_paint, null]
@@ -210,6 +269,16 @@ define debugger_run(cpu, mem, ppu, joy, scale, break_cycle, tick_limit) as:
     append of [controls.children, btn_step]
     append of [controls.children, btn_frame]
     dock_add of [dk, "west", dock_panel of ["controls", controls]]
+
+    # Memory panel (south): hex_view over the live bus, whole 64K
+    # address space, opened at DBG_MEM_HOME. Pure reader; never copies
+    # the memory.
+    local mem_hv is hex_view of ["mem", 0, 0, 10, 10, _dbg_mem_reader, 0x10000]
+    local mm is hex_view_metrics of mem_hv
+    mem_hv.scroll_y is (floor of (DBG_MEM_HOME / mem_hv.bytes_per_row)) * mm.row_h
+    mem_hv.on_select is _dbg_mem_select
+    DBG.mem_hv is mem_hv
+    dock_add of [dk, "south", dock_panel of ["memory", mem_hv]]
 
     _dbg_render_fb of null
     _dbg_refresh_regs of null
