@@ -1,0 +1,23 @@
+# Atlas app (#53): renders the printable charset through code_view at
+# the debugger registers panel's exact grid (scale-1 glyphs, 6px
+# advance, 18px line pitch, text origin ax+4/ay+2) so ui_debug_oracle.py
+# builds its glyph atlas from real rendered pixels — never a
+# self-authored golden image. The oracle screenshots this window and
+# cuts cells; the window stays open until the harness kills it.
+load_file of "lib/ui.eigs"
+
+line1 is ""
+i is 33
+loop while i < 80:
+    line1 is line1 + (chr of i)
+    i += 1
+line2 is ""
+loop while i < 127:
+    line2 is line2 + (chr of i)
+    i += 1
+
+cv is code_view of ["atlas", 0, 0, 640, 200, f"{line1}\n{line2}"]
+cv.line_numbers is 0
+gfx_open of [640, 200, "DMG atlas"]
+app_loop of [cv, null, null]
+gfx_close of null

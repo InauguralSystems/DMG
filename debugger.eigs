@@ -36,11 +36,21 @@ DBG is {
     "regs_cv": null,
     "btn_pause": null,
     "btn_step": null,
-    "btn_frame": null
+    "btn_frame": null,
+    # --plant-render-fault (oracle validation only): corrupt the PANEL
+    # text while the stdout dump stays truthful — the render-decode
+    # checker MUST catch the divergence or it proves nothing.
+    "plant_fault": 0
 }
 
 define _dbg_refresh_regs() as:
-    DBG.regs_cv.text is debug_regs_text of [DBG.cpu, DBG.mem, DBG.total]
+    local t is debug_regs_text of [DBG.cpu, DBG.mem, DBG.total]
+    if DBG.plant_fault == 1:
+        # Drop the first line and stamp a wrong PC — a render fault the
+        # dump does not share.
+        local nl is index_of of [t, "\n"]
+        t is f"PC=DEAD\n{substr of [t, nl + 1, len of t]}"
+    DBG.regs_cv.text is t
 
 define _dbg_render_fb() as:
     ppu_render_frame of [DBG.mem.data, DBG.ppu.fb]
