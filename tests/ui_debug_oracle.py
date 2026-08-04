@@ -344,6 +344,78 @@ def check_dis_panel(chrome, atlas2, block_text, label, img=None):
     return True
 
 
+# gfx_fb's fixed palette (ext_gfx.c).
+FB_PALETTE = {0: (255, 255, 255), 1: (170, 170, 170),
+              2: (85, 85, 85), 3: (0, 0, 0)}
+
+
+def check_tiles(chrome, block_text, label, img=None):
+    """Independent 2bpp decode of DBG_TILEDATA vs the tile canvas pixels."""
+    tx, ty, tw, th = chrome.geom("tiles")
+    data = dict(re.findall(r"^DBG_TILEDATA (\d+) ([0-9A-Fa-f]{32})$",
+                           block_text, re.M))
+    if len(data) != 384:
+        raise RuntimeError("expected 384 DBG_TILEDATA lines, got %d (run with --emit-tiles)"
+                           % len(data))
+    if img is None:
+        img = chrome.shot()
+    px = img.load()
+    ox, oy = tx + (tw - 128) // 2, ty + 2
+    bad = 0
+    first = None
+    for t in range(384):
+        raw = bytes.fromhex(data[str(t)])
+        bx, by = (t % 16) * 8, (t // 16) * 8
+        for row in range(8):
+            lo, hi = raw[row * 2], raw[row * 2 + 1]
+            for bit in range(8):
+                sh = 7 - bit
+                idx = ((lo >> sh) & 1) | (((hi >> sh) & 1) << 1)
+                got = px[ox + bx + bit, oy + by + row][:3]
+                if got != FB_PALETTE[idx]:
+                    bad += 1
+                    if first is None:
+                        first = (t, bit, row, idx, got)
+    if bad:
+        print("FAIL: %s — %d/24576 tile pixels diverge (first: tile %d px(%d,%d) want idx %d got %s)"
+              % (label, bad, first[0], first[1], first[2], first[3], first[4]))
+        return False
+    print("PASS: %s — 384 tiles / 24576 pixels match the independent 2bpp decode"
+          % label)
+    return True
+
+
+def check_oam_panel(chrome, atlas, block_text, label, img=None):
+    """Decode the OAM code_view rows and diff vs the DBG_OAM seam."""
+    ox_, oy_, ow, oh = chrome.geom("oam")
+    lines = dict((int(i), t) for i, t in
+                 re.findall(r"^DBG_OAM (\d+) (.*)$", block_text, re.M))
+    if not lines:
+        raise RuntimeError("no DBG_OAM lines in pause block")
+    nvis = (oh - 17) // LINE_H + 1
+    if img is None:
+        img = chrome.shot()
+    px = img.load()
+    ncols = (ow - TEXT_DX - 4) // CELL_W
+    bad = []
+    for li in range(min(nvis, len(lines))):
+        cy = oy_ + TEXT_DY + li * LINE_H
+        out = []
+        for col in range(ncols):
+            cx = ox_ + TEXT_DX + col * CELL_W
+            sig = cell_sig(px, cx, cy)
+            out.append(atlas.get(sig, " " if sig == 0 else "?"))
+        got = "".join(out).rstrip()
+        if got != lines[li].rstrip():
+            bad.append((li, lines[li].rstrip(), got))
+    if bad:
+        print("FAIL: %s — %d OAM rows diverge (first: #%d want %r got %r)"
+              % (label, len(bad), bad[0][0], bad[0][1], bad[0][2]))
+        return False
+    print("PASS: %s — %d OAM rows decode byte-identical" % (label, min(nvis, len(lines))))
+    return True
+
+
 def check_panel(chrome, atlas, dump_lines, label):
     rx, ry, rw, rh = chrome.geom("regs")
     img = chrome.shot()
@@ -368,12 +440,14 @@ def main():
     ok = True
 
     # ---- phases 1+2: break-pause decode, then real-input stepping ----
-    c = Chrome(tmp, ["--break-cycle", "400000"])
+    c = Chrome(tmp, ["--break-cycle", "400000", "--emit-tiles"])
     try:
         d1, b1 = c.wait_blocks(1, reason="paused")
         ok &= check_panel(c, atlas, d1, "auto-break pause")
         ok &= check_mem_panel(c, atlas, b1, "auto-break memory panel")
         ok &= check_dis_panel(c, atlas2, b1, "auto-break disasm panel")
+        ok &= check_tiles(c, b1, "auto-break tile viewer")
+        ok &= check_oam_panel(c, atlas, b1, "auto-break OAM panel")
 
         # Click-away guard: a click on the LCD center must not step/dump.
         rx, ry, rw, rh = c.geom("regs")
@@ -520,6 +594,31 @@ def main():
             ok = False
         else:
             print("PASS: planted disasm fault caught")
+    finally:
+        c.close()
+
+    # ---- phase 6: the planted TILES fault MUST be caught ----
+    c = Chrome(tmp, ["--break-cycle", "400000", "--emit-tiles",
+                     "--plant-tiles-fault"])
+    try:
+        _, b = c.wait_blocks(1, reason="paused")
+        if check_tiles(c, b, "(plant probe, must fail)"):
+            print("FAIL: planted tiles fault NOT caught — the tile checker is blind")
+            ok = False
+        else:
+            print("PASS: planted tiles fault caught")
+    finally:
+        c.close()
+
+    # ---- phase 7: the planted OAM fault MUST be caught ----
+    c = Chrome(tmp, ["--break-cycle", "400000", "--plant-oam-fault"])
+    try:
+        _, b = c.wait_blocks(1, reason="paused")
+        if check_oam_panel(c, atlas, b, "(plant probe, must fail)"):
+            print("FAIL: planted OAM fault NOT caught — the OAM checker is blind")
+            ok = False
+        else:
+            print("PASS: planted OAM fault caught")
     finally:
         c.close()
 

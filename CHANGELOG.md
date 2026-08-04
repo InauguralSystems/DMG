@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Debugger — tile + OAM viewers (#53, fourth artifact; completes the chrome)
+- East tile viewer: 384 VRAM tiles 2bpp-decoded into a 128x192
+  palette-indexed fb (raw color indices, not BGP-mapped), blitted with
+  `gfx_fb`, rebuilt on pause/step. Oracle: the harness decodes
+  `DBG_TILEDATA` (bus bytes, `--emit-tiles`) with its OWN independent
+  2bpp implementation and compares all 24576 canvas pixels against
+  gfx_fb's palette — `--plant-tiles-fault` (inverts tile 0 in the
+  render fb only) is caught at exactly 64 pixels.
+- South OAM panel: 40 sprites as text over `mem_read`; decode leg vs
+  the `DBG_OAM` seam; `--plant-oam-fault` caught.
+- The disassembly window now sizes itself to the whole rows its panel
+  can show (it shares the east region with the tile viewer).
+
 ### Debugger — disassembly + breakpoints (#53, third artifact)
 - `src/disasm.eigs`: pure SM83 disassembler over a byte-reader callback
   (algorithmic octal-field decode, computed CB page). Length oracle in
