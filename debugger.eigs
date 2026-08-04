@@ -40,6 +40,9 @@ DBG is {
     "tick_limit": 0,
     "regs_cv": null,
     "mem_hv": null,
+    "dis_il": null,
+    "dis_addrs": [],
+    "bps": [],
     "btn_pause": null,
     "btn_step": null,
     "btn_frame": null,
@@ -49,8 +52,52 @@ DBG is {
     "plant_fault": 0,
     # --plant-mem-fault: corrupt one byte in the memory panel's RENDER
     # reader while the DBG_MEM seam (mem_read direct) stays truthful.
-    "plant_mem": 0
+    "plant_mem": 0,
+    # --plant-dis-fault: corrupt one WIDGET item while the DBG_DIS seam
+    # (regenerated fresh at emit) stays truthful.
+    "plant_dis": 0
 }
+
+DIS_LINES is 18
+
+define _dbg_dis_reader(a) as:
+    return mem_read of [DBG.mem, a]
+
+define _dbg_bp_hit(pc) as:
+    for a in DBG.bps:
+        if a == pc:
+            return 1
+    return 0
+
+# The disassembly window as (addr, text) lines: forward from PC, "> "
+# on the PC line, "* " on breakpoint lines. Both the widget refresh and
+# the DBG_DIS emit call this — the emit calls it FRESH, so a fault
+# planted into the widget's copy diverges the two.
+define _dbg_dis_lines() as:
+    local win is disasm_window of [_dbg_dis_reader, DBG.cpu.pc, DIS_LINES]
+    local out is []
+    for i in range of (len of win):
+        local ln is win[i]
+        local mk is "  "
+        if ln.addr == DBG.cpu.pc:
+            mk is "> "
+        elif (_dbg_bp_hit of ln.addr) == 1:
+            mk is "* "
+        append of [out, {"addr": ln.addr, "text": f"{mk}{ln.text}"}]
+    return out
+
+define _dbg_refresh_dis() as:
+    local lines is _dbg_dis_lines of null
+    local items is []
+    local addrs is []
+    for i in range of (len of lines):
+        append of [items, lines[i].text]
+        append of [addrs, lines[i].addr]
+    if DBG.plant_dis == 1 and (len of items) > 1:
+        items[1] is "  DEAD  NOP"
+    DBG.dis_il.items is items
+    DBG.dis_addrs is addrs
+    DBG.dis_il.selected is 0 - 1
 
 # The memory panel's reader — the RENDER leg. The DBG_MEM/DBG_SELECT
 # seams deliberately bypass it and call mem_read directly (the CORE
@@ -69,6 +116,8 @@ define _dbg_refresh_regs() as:
         local nl is index_of of [t, "\n"]
         t is f"PC=DEAD\n{substr of [t, nl + 1, len of t]}"
     DBG.regs_cv.text is t
+    if DBG.dis_il != null:
+        _dbg_refresh_dis of null
 
 define _dbg_render_fb() as:
     ppu_render_frame of [DBG.mem.data, DBG.ppu.fb]
@@ -112,6 +161,12 @@ define _dbg_emit_state(reason) as:
         local mb is dkv.panels.south[0].body
         print of f"DBG_GEOM mem {mb[0]} {mb[1]} {mb[2]} {mb[3]}"
         _dbg_emit_mem of DBG.mem_hv
+    if DBG.dis_il != null:
+        local db is dkv.panels.east[0].body
+        print of f"DBG_GEOM dis {db[0]} {db[1]} {db[2]} {db[3]}"
+        local dls is _dbg_dis_lines of null
+        for i in range of (len of dls):
+            print of f"DBG_DIS {i} {dls[i].text}"
     print of "=== STATE DUMP ==="
     print of (debug_state_dump of [DBG.cpu, DBG.mem, DBG.total])
     print of "=== END DUMP ==="
@@ -119,6 +174,25 @@ define _dbg_emit_state(reason) as:
 # USER clicks only (the #842 gesture contract). Core leg: mem_read.
 define _dbg_mem_select(hv, addr) as:
     print of f"DBG_SELECT {hex of [addr, 4]} {hex of [mem_read of [DBG.mem, addr], 2]}"
+
+# Click a disassembly line: toggle a breakpoint at its address.
+define _dbg_dis_select(il) as:
+    _dbg_blur of null
+    local idx is il.selected
+    if idx < 0 or idx >= (len of DBG.dis_addrs):
+        return null
+    local addr is DBG.dis_addrs[idx]
+    if (_dbg_bp_hit of addr) == 1:
+        local kept is []
+        for a in DBG.bps:
+            if a != addr:
+                append of [kept, a]
+        DBG.bps is kept
+        print of f"DBG_BP {hex of [addr, 4]} 0"
+    else:
+        append of [DBG.bps, addr]
+        print of f"DBG_BP {hex of [addr, 4]} 1"
+    _dbg_refresh_dis of null
 
 # A clicked button keeps toolkit focus, and the focus path re-fires a
 # focused button on space/return ON TOP of our key handler (app_loop
@@ -129,13 +203,17 @@ define _dbg_blur() as:
     _ui.focused_input is null
     _ui.focus_index is 0 - 1
 
+define _dbg_pause_with(reason) as:
+    DBG.paused is 1
+    DBG.btn_pause.label is "Run [p]"
+    _dbg_refresh_regs of null
+    _dbg_emit_state of reason
+
 define _dbg_set_paused(v) as:
-    DBG.paused is v
     if v == 1:
-        DBG.btn_pause.label is "Run [p]"
-        _dbg_refresh_regs of null
-        _dbg_emit_state of "paused"
+        _dbg_pause_with of "paused"
     else:
+        DBG.paused is 0
         DBG.btn_pause.label is "Pause [p]"
 
 define _dbg_click_pause(b) as:
@@ -188,9 +266,29 @@ define _dbg_tick(root) as:
         request_quit of null
         return null
     if DBG.paused == 0:
-        DBG.total += run_frame of [DBG.cpu, DBG.mem]
-        DBG.ppu.frame_count += 1
-        _dbg_render_fb of null
+        if (len of DBG.bps) > 0:
+            # Breakpoints armed: run the frame through the debug
+            # stepper so PC is visible at every instruction boundary.
+            # Slower than run_frame — that is the price of arming bps;
+            # disarm them all and RUN is the hot loop again.
+            local fc is 0
+            local hit is 0
+            unobserved:
+              loop while fc < CYCLES_PER_FRAME:
+                fc += debug_step_instr of [DBG.cpu, DBG.mem]
+                if (_dbg_bp_hit of DBG.cpu.pc) == 1:
+                    hit is 1
+                    break
+            DBG.total += fc
+            DBG.ppu.frame_count += 1
+            _dbg_render_fb of null
+            if hit == 1:
+                _dbg_pause_with of "breakpoint"
+                return null
+        else:
+            DBG.total += run_frame of [DBG.cpu, DBG.mem]
+            DBG.ppu.frame_count += 1
+            _dbg_render_fb of null
         _dbg_refresh_regs of null
         if DBG.break_cycle >= 0 and DBG.broke == 0 and DBG.total >= DBG.break_cycle:
             DBG.broke is 1
@@ -225,7 +323,7 @@ define _dbg_on_key(ev) as:
         joypad_update of [DBG.joy, DBG.mem, ev]
     return 1
 
-define debugger_run(cpu, mem, ppu, joy, scale, break_cycle, tick_limit) as:
+define debugger_run(cpu, mem, ppu, joy, scale, break_cycle, tick_limit, preset_bps) as:
     DBG.cpu is cpu
     DBG.mem is mem
     DBG.ppu is ppu
@@ -235,8 +333,11 @@ define debugger_run(cpu, mem, ppu, joy, scale, break_cycle, tick_limit) as:
     DBG.tick_limit is tick_limit
 
     local west_w is 210
+    # Wide enough for the longest disasm line (21 chars at 12px + 16px
+    # padding — the decode oracle caught a clipped final char at 260).
+    local east_w is 280
     local south_h is 200
-    local win_w is west_w + 5 + (160 * scale) + 24
+    local win_w is west_w + 5 + (160 * scale) + 24 + east_w + 5
     local win_h is (144 * scale) + 24
     if win_h < 460:
         win_h is 460
@@ -245,6 +346,7 @@ define debugger_run(cpu, mem, ppu, joy, scale, break_cycle, tick_limit) as:
 
     local dk is dock of ["dock", 0, 0, win_w, win_h]
     dk.west_w is west_w
+    dk.east_w is east_w
     dk.south_h is south_h
     DBG.dk is dk
 
@@ -279,6 +381,14 @@ define debugger_run(cpu, mem, ppu, joy, scale, break_cycle, tick_limit) as:
     mem_hv.on_select is _dbg_mem_select
     DBG.mem_hv is mem_hv
     dock_add of [dk, "south", dock_panel of ["memory", mem_hv]]
+
+    # Disassembly panel (east): forward window from PC, click a line to
+    # toggle a breakpoint there.
+    local dis_il is item_list of ["dis", 0, 0, 10, 10, [], _dbg_dis_select]
+    DBG.dis_il is dis_il
+    dock_add of [dk, "east", dock_panel of ["disassembly", dis_il]]
+    for preset in preset_bps:
+        append of [DBG.bps, preset]
 
     _dbg_render_fb of null
     _dbg_refresh_regs of null

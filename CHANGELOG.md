@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Debugger — disassembly + breakpoints (#53, third artifact)
+- `src/disasm.eigs`: pure SM83 disassembler over a byte-reader callback
+  (algorithmic octal-field decode, computed CB page). Length oracle in
+  `run_debug_equivalence.sh`: every straight-line instruction the debug
+  engine executes must advance PC by exactly `disasm_one`'s len —
+  172K+ live instructions, zero mismatches, planted wrong-length fault
+  caught. Mnemonics pinned by `tests/disasm_golden.txt` (golden master
+  — regression pin, not proof). `--disasm-dump ADDR N` on the CLI.
+- East disassembly panel: forward window from PC (`>` marker, `*` on
+  breakpoints), click a line to toggle a breakpoint; `--bp ADDR`
+  presets. With breakpoints armed, RUN steps the frame through the
+  debug engine (PC visible per instruction) and pauses with reason
+  `breakpoint`; disarmed, RUN is the hot loop again.
+- Oracle legs: scale-2 glyph atlas (item_list renders at font_scale 2),
+  disasm rows decoded from screenshots vs the fresh `DBG_DIS` seam,
+  full real-mouse breakpoint round-trip (arm at PC → Run traps at that
+  PC → panels decode at the bp → click clears), `--plant-dis-fault`
+  caught. The decode oracle caught a real clipped final character at
+  east_w=260 (widened to 280).
+
 ### Debugger — memory panel (#53, second artifact)
 - South `hex_view` panel over the live bus (pure reader, whole 64K,
   opens at the stack); click a byte → `DBG_SELECT addr value` from

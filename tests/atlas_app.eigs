@@ -16,8 +16,17 @@ loop while i < 127:
     line2 is line2 + (chr of i)
     i += 1
 
-cv is code_view of ["atlas", 0, 0, 640, 200, f"{line1}\n{line2}"]
+# Two glyph scales, both from real rendered output: code_view draws at
+# scale 1 (registers/memory panels' grid), item_list at _theme.font_scale
+# = 2 (the disassembly panel). vbox with gap 6: code_view rows at
+# (4, 2 + li*18) from (0,0); item_list rows at (8, 50 + 4 + i*22).
+cv is code_view of ["atlas1", 0, 0, 640, 44, f"{line1}\n{line2}"]
 cv.line_numbers is 0
+il is item_list of ["atlas2", 0, 0, 640, 60, [line1, line2], null]
+root is vbox of ["root", 0, 0, 640, 200]
+root.gap is 6
+append of [root.children, cv]
+append of [root.children, il]
 gfx_open of [640, 200, "DMG atlas"]
-app_loop of [cv, null, null]
+app_loop of [root, null, null]
 gfx_close of null

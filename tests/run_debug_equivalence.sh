@@ -65,4 +65,36 @@ if ! grep -q "Passed" <<< "$out"; then
 fi
 echo "PASS: Blargg $BLARGG_ROM Passed on the debug engine"
 
+echo "--- C: disasm length-consistency vs the live CPU ---"
+out="$(timeout "$TIMEOUT_SECONDS" "$EIGS" dmg.eigs roms/cpu_instrs.gb \
+    --cycles 20000000 --disasm-oracle 300000 2>&1)" || {
+    echo "FAIL: disasm length oracle exited nonzero"; printf '%s\n' "$out" | tail -4; exit 1; }
+if ! grep -q "mismatches=0" <<< "$out"; then
+    echo "FAIL: disasm length oracle reported mismatches."
+    printf '%s\n' "$out" | tail -4
+    exit 1
+fi
+checked="$(grep -o 'checked=[0-9]*' <<< "$out" | cut -d= -f2)"
+if [[ "${checked:-0}" -lt 100000 ]]; then
+    echo "FAIL: disasm oracle checked only ${checked:-0} instructions."
+    exit 1
+fi
+echo "PASS: disasm lengths consistent over $checked live instructions"
+# The checker must catch a planted wrong-length fault or it proves nothing.
+if timeout "$TIMEOUT_SECONDS" "$EIGS" dmg.eigs roms/cpu_instrs.gb \
+    --cycles 20000000 --disasm-oracle 1000 --plant-disasm-fault >/dev/null 2>&1; then
+    echo "FAIL: planted disasm length fault NOT caught."
+    exit 1
+fi
+echo "PASS: planted disasm length fault caught"
+
+echo "--- D: disasm golden master (regression pin, not proof) ---"
+timeout "$TIMEOUT_SECONDS" "$EIGS" dmg.eigs roms/cpu_instrs.gb \
+    --disasm-dump 256 24 2>/dev/null | grep -v "^ROM loaded" > "$tmp/dis.txt"
+if ! diff -u tests/disasm_golden.txt "$tmp/dis.txt"; then
+    echo "FAIL: disasm output drifted from the golden master."
+    exit 1
+fi
+echo "PASS: disasm golden master unchanged"
+
 echo "PASS: debug-engine equivalence gate"
