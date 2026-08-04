@@ -13,6 +13,7 @@ load_file of "src/lcd.eigs"
 load_file of "src/opcodes.eigs"
 load_file of "src/joypad.eigs"
 load_file of "src/ppu.eigs"
+load_file of "src/debug.eigs"
 
 # ============================================================
 # Timer registers
@@ -212,6 +213,10 @@ frameskip is 2
 gfx_scale is 3
 input_script is ""
 render_probe is 0
+dump_state is 0
+engine is "hot"
+debug_mode is 0
+break_cycle is -1
 
 i is 1
 loop while i < (len of argv):
@@ -236,6 +241,17 @@ loop while i < (len of argv):
         render_probe is 1
     elif argv[i] == "--strict-illegal":
         _strict_illegal[0] is 1
+    elif argv[i] == "--dump-state":
+        dump_state is 1
+    elif argv[i] == "--engine" and i + 1 < (len of argv):
+        i += 1
+        engine is argv[i]
+    elif argv[i] == "--debug":
+        debug_mode is 1
+        gfx_mode is 1
+    elif argv[i] == "--break-cycle" and i + 1 < (len of argv):
+        i += 1
+        break_cycle is floor of (num of argv[i])
     i += 1
 
 # sort_by key for input events [cycle, button, state]. apply_input_events
@@ -667,9 +683,15 @@ if gfx_mode == 0:
     if (len of input_events) > 0:
         headless_joy is new_joypad of null
         mem.joypad is headless_joy
-    loop_result is run_headless_loop of [cpu, mem, max_cycles, input_events, total_cycles]
+    input_events_applied is 0
+    if engine == "debug":
+        # The equivalence-gate path (#53): same run, non-inlined stepper.
+        assert of [(len of input_events) == 0, "--engine debug does not take --input-script"]
+        loop_result is run_debug_engine_loop of [cpu, mem, max_cycles, total_cycles]
+    else:
+        loop_result is run_headless_loop of [cpu, mem, max_cycles, input_events, total_cycles]
+        input_events_applied is loop_result["input_events_applied"]
     total_cycles is loop_result["total_cycles"]
-    input_events_applied is loop_result["input_events_applied"]
     printed_ram_output is loop_result["printed_ram_output"]
 
     print of f"\nLoop exited: cycles={total_cycles} halted={cpu.halted} stopped={cpu.stopped} PC={cpu.pc}"
@@ -691,3 +713,6 @@ if gfx_mode == 0:
     if render_probe == 1:
         render_stats is render_probe_stats of mem
         print of f"Render probe: nonzero={render_stats[0]} unique={render_stats[1]} hash={render_stats[2]} c0={render_stats[3]} c1={render_stats[4]} c2={render_stats[5]} c3={render_stats[6]}"
+    if dump_state == 1:
+        print of "=== STATE DUMP ==="
+        print of (debug_state_dump of [cpu, mem, total_cycles])
