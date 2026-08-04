@@ -42,7 +42,12 @@ DBG is {
     "mem_hv": null,
     "dis_il": null,
     "dis_addrs": [],
+    "dis_n": 8,
     "bps": [],
+    "tiles_cv": null,
+    "tiles_fb": null,
+    "oam_cv": null,
+    "emit_tiles": 0,
     "btn_pause": null,
     "btn_step": null,
     "btn_frame": null,
@@ -55,10 +60,55 @@ DBG is {
     "plant_mem": 0,
     # --plant-dis-fault: corrupt one WIDGET item while the DBG_DIS seam
     # (regenerated fresh at emit) stays truthful.
-    "plant_dis": 0
+    "plant_dis": 0,
+    # --plant-tiles-fault: invert tile 0's pixels in the RENDER fb only.
+    "plant_tiles": 0,
+    # --plant-oam-fault: corrupt the OAM panel's first WIDGET line only.
+    "plant_oam": 0
 }
 
-DIS_LINES is 18
+# ---- Tile viewer: 384 tiles from VRAM 0x8000-0x97FF, 2bpp decoded
+# into a 128x192 palette-indexed fb (16 tiles per row), blitted with
+# gfx_fb like the LCD. Raw color indices, not BGP-mapped — this is a
+# VRAM view, not a screen view. Rebuilt on pause/step only.
+define _dbg_tiles_rebuild() as:
+    local fb is DBG.tiles_fb
+    unobserved:
+      for t in range of 384:
+        local base is 0x8000 + (t * 16)
+        local tx is (t % 16) * 8
+        local ty is (floor of (t / 16)) * 8
+        for row in range of 8:
+            local lo is mem_read of [DBG.mem, base + (row * 2)]
+            local hi is mem_read of [DBG.mem, base + (row * 2) + 1]
+            if DBG.plant_tiles == 1 and t == 0:
+                lo is lo ^ 0xFF
+                hi is hi ^ 0xFF
+            local o is ((ty + row) * 128) + tx
+            for bit in range of 8:
+                local sh is 7 - bit
+                fb[o + bit] is ((lo >> sh) & 1) | (((hi >> sh) & 1) << 1)
+
+define _tiles_paint(cv, ax, ay) as:
+    gfx_clip of [ax, ay, cv.w, cv.h]
+    gfx_rect of [ax, ay, cv.w, cv.h, 8, 8, 12]
+    local ox is ax + (floor of ((cv.w - 128) / 2))
+    if ox < ax:
+        ox is ax
+    gfx_fb of [DBG.tiles_fb, 128, 192, ox, ay + 2, 1]
+    gfx_clip of null
+
+# ---- OAM panel: 40 sprites, 4 bytes each, as text (code_view). ----
+define _dbg_oam_text() as:
+    local lines is []
+    for s in range of 40:
+        local b is 0xFE00 + (s * 4)
+        local sy is mem_read of [DBG.mem, b]
+        local sx is mem_read of [DBG.mem, b + 1]
+        local st is mem_read of [DBG.mem, b + 2]
+        local sf is mem_read of [DBG.mem, b + 3]
+        append of [lines, f"{hex of [s, 2]}: Y={hex of [sy, 2]} X={hex of [sx, 2]} T={hex of [st, 2]} F={hex of [sf, 2]}"]
+    return join of [lines, "\n"]
 
 define _dbg_dis_reader(a) as:
     return mem_read of [DBG.mem, a]
@@ -74,7 +124,7 @@ define _dbg_bp_hit(pc) as:
 # the DBG_DIS emit call this — the emit calls it FRESH, so a fault
 # planted into the widget's copy diverges the two.
 define _dbg_dis_lines() as:
-    local win is disasm_window of [_dbg_dis_reader, DBG.cpu.pc, DIS_LINES]
+    local win is disasm_window of [_dbg_dis_reader, DBG.cpu.pc, DBG.dis_n]
     local out is []
     for i in range of (len of win):
         local ln is win[i]
@@ -118,6 +168,12 @@ define _dbg_refresh_regs() as:
     DBG.regs_cv.text is t
     if DBG.dis_il != null:
         _dbg_refresh_dis of null
+    if DBG.oam_cv != null:
+        local ot is _dbg_oam_text of null
+        if DBG.plant_oam == 1:
+            local onl is index_of of [ot, "\n"]
+            ot is f"XX: DEAD\n{substr of [ot, onl + 1, len of ot]}"
+        DBG.oam_cv.text is ot
 
 define _dbg_render_fb() as:
     ppu_render_frame of [DBG.mem.data, DBG.ppu.fb]
@@ -167,6 +223,22 @@ define _dbg_emit_state(reason) as:
         local dls is _dbg_dis_lines of null
         for i in range of (len of dls):
             print of f"DBG_DIS {i} {dls[i].text}"
+    if DBG.tiles_cv != null:
+        _dbg_tiles_rebuild of null
+        local tb is dkv.panels.east[1].body
+        print of f"DBG_GEOM tiles {tb[0]} {tb[1]} {tb[2]} {tb[3]}"
+        if DBG.emit_tiles == 1:
+            for t in range of 384:
+                local thx is ""
+                for bi in range of 16:
+                    thx is thx + (hex of [mem_read of [DBG.mem, 0x8000 + (t * 16) + bi], 2])
+                print of f"DBG_TILEDATA {t} {thx}"
+    if DBG.oam_cv != null:
+        local ob is dkv.panels.south[1].body
+        print of f"DBG_GEOM oam {ob[0]} {ob[1]} {ob[2]} {ob[3]}"
+        local oam_lines is split of [_dbg_oam_text of null, "\n"]
+        for oi in range of (len of oam_lines):
+            print of f"DBG_OAM {oi} {oam_lines[oi]}"
     print of "=== STATE DUMP ==="
     print of (debug_state_dump of [DBG.cpu, DBG.mem, DBG.total])
     print of "=== END DUMP ==="
@@ -297,6 +369,14 @@ define _dbg_tick(root) as:
     # layout pass has stamped absolute positions.
     if DBG.geom_printed == 0 and DBG.btn_pause._ax != null:
         DBG.geom_printed is 1
+        # Size the disasm window to the whole rows its panel can show
+        # (partial rows are clipped mid-glyph — the decode oracle reads
+        # only what a user can actually read).
+        local dkv is dock_view of DBG.dk
+        local dbh is dkv.panels.east[0].body[3]
+        DBG.dis_n is floor of ((dbh - 20) / 22)
+        if DBG.dis_n < 4:
+            DBG.dis_n is 4
         local bp is DBG.btn_pause
         local bs is DBG.btn_step
         local bf is DBG.btn_frame
@@ -390,7 +470,20 @@ define debugger_run(cpu, mem, ppu, joy, scale, break_cycle, tick_limit, preset_b
     for preset in preset_bps:
         append of [DBG.bps, preset]
 
+    # Tile viewer (east, under the disassembly).
+    local tiles_cv is canvas of ["tiles", 0, 0, 10, 10, _tiles_paint, null]
+    DBG.tiles_cv is tiles_cv
+    DBG.tiles_fb is buffer of 24576
+    dock_add of [dk, "east", dock_panel of ["tiles", tiles_cv]]
+
+    # OAM panel (south, beside the memory panel).
+    local oam_cv is code_view of ["oam", 0, 0, 10, 10, ""]
+    oam_cv.line_numbers is 0
+    DBG.oam_cv is oam_cv
+    dock_add of [dk, "south", dock_panel of ["oam", oam_cv]]
+
     _dbg_render_fb of null
+    _dbg_tiles_rebuild of null
     _dbg_refresh_regs of null
 
     gfx_open of [win_w, win_h, "DMG debugger"]
