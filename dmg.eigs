@@ -14,6 +14,7 @@ load_file of "src/opcodes.eigs"
 load_file of "src/joypad.eigs"
 load_file of "src/ppu.eigs"
 load_file of "src/debug.eigs"
+load_file of "src/disasm.eigs"
 
 # ============================================================
 # Timer registers
@@ -219,6 +220,11 @@ debug_mode is 0
 break_cycle is -1
 plant_render_fault is 0
 plant_mem_fault is 0
+disasm_oracle is 0
+disasm_dump_addr is -1
+disasm_dump_n is 24
+plant_dis_fault is 0
+preset_bps is []
 
 i is 1
 loop while i < (len of argv):
@@ -258,6 +264,20 @@ loop while i < (len of argv):
         plant_render_fault is 1
     elif argv[i] == "--plant-mem-fault":
         plant_mem_fault is 1
+    elif argv[i] == "--disasm-oracle" and i + 1 < (len of argv):
+        i += 1
+        disasm_oracle is floor of (num of argv[i])
+    elif argv[i] == "--plant-disasm-fault":
+        _dis_plant[0] is 1
+    elif argv[i] == "--disasm-dump" and i + 2 < (len of argv):
+        disasm_dump_addr is floor of (num of argv[i + 1])
+        disasm_dump_n is floor of (num of argv[i + 2])
+        i += 2
+    elif argv[i] == "--plant-dis-fault":
+        plant_dis_fault is 1
+    elif argv[i] == "--bp" and i + 1 < (len of argv):
+        i += 1
+        append of [preset_bps, floor of (num of argv[i])]
     i += 1
 
 # sort_by key for input events [cycle, button, state]. apply_input_events
@@ -625,7 +645,8 @@ if gfx_mode == 1 and debug_mode == 1:
     load_file of "debugger.eigs"
     DBG.plant_fault is plant_render_fault
     DBG.plant_mem is plant_mem_fault
-    total_cycles is debugger_run of [cpu, mem, ppu, joy, gfx_scale, break_cycle, gfx_frame_limit]
+    DBG.plant_dis is plant_dis_fault
+    total_cycles is debugger_run of [cpu, mem, ppu, joy, gfx_scale, break_cycle, gfx_frame_limit, preset_bps]
     print of f"\nDebugger exited: cycles={total_cycles} frames={ppu.frame_count}"
 elif gfx_mode == 1:
     ppu is new_ppu of null
@@ -694,9 +715,56 @@ elif gfx_mode == 1:
     if (len of mem.serial_output) > 0:
         print of f"Serial output: {mem.serial_output}"
 
+# The disassembler's bus reader (pure: mem_read only).
+define _disasm_reader(a) as:
+    return mem_read of [mem, a]
+
 # ============================================================
 # Headless mode (Blargg tests)
 # ============================================================
+
+# --disasm-dump ADDR N: print a disassembly window and exit. The
+# entry-window output is pinned by tests/disasm_golden.txt (a golden
+# master — regression pin, not proof of correctness).
+if gfx_mode == 0 and disasm_dump_addr >= 0:
+    for dl in disasm_window of [_disasm_reader, disasm_dump_addr, disasm_dump_n]:
+        print of dl.text
+    exit of 0
+
+# --disasm-oracle N: length-consistency gate (#53). For every
+# straight-line instruction the debug engine executes, PC must advance
+# by exactly disasm_one's len. flow instructions and possible interrupt
+# hijacks are excused; a landing on an interrupt vector reclassifies as
+# skipped. --plant-disasm-fault must make this report mismatches.
+if gfx_mode == 0 and disasm_oracle > 0:
+    checked is 0
+    skipped is 0
+    mismatches is 0
+    loop while total_cycles < max_cycles and (checked + skipped) < disasm_oracle:
+        if cpu.halted == 1 or cpu.stopped == 1:
+            total_cycles += debug_step_instr of [cpu, mem]
+            continue
+        pc0 is cpu.pc
+        d is disasm_one of [_disasm_reader, pc0]
+        may_int is (mem.ie & mem.if_reg & 0x1F) != 0
+        total_cycles += debug_step_instr of [cpu, mem]
+        if d.flow == 1 or may_int == 1:
+            skipped += 1
+            continue
+        expect is (pc0 + d.len) & 0xFFFF
+        if cpu.pc != expect:
+            if cpu.pc == 0x40 or cpu.pc == 0x48 or cpu.pc == 0x50 or cpu.pc == 0x58 or cpu.pc == 0x60:
+                skipped += 1
+                continue
+            mismatches += 1
+            print of f"DISASM MISMATCH at {hex of [pc0, 4]}: {d.text} len={d.len} pc->{hex of [cpu.pc, 4]}"
+            if mismatches > 5:
+                break
+        checked += 1
+    print of f"Disasm oracle: checked={checked} skipped={skipped} mismatches={mismatches}"
+    if mismatches > 0:
+        exit of 1
+    exit of 0
 
 if gfx_mode == 0:
     input_events is parse_input_script of input_script

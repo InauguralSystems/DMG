@@ -92,37 +92,54 @@ def kill_window(wid):
     subprocess.run(["xdotool", "windowkill", wid], env=ENV, capture_output=True)
 
 
-def cell_sig(px, cx, cy):
+def cell_sig(px, cx, cy, cw=CELL_W, gh=GLYPH_H):
     sig = 0
-    for dy in range(GLYPH_H):
-        for dx in range(CELL_W):
+    for dy in range(gh):
+        for dx in range(cw):
             if INK(*px[cx + dx, cy + dy]):
-                sig |= 1 << (dy * CELL_W + dx)
+                sig |= 1 << (dy * cw + dx)
     return sig
 
 
+# item_list (the disassembly panel) renders at font_scale 2.
+CELL2_W, GLYPH2_H, ITEM_H = 12, 14, 22
+
+
 def build_atlas(tmp):
-    """Render the charset via atlas_app.eigs and cut per-glyph signatures."""
+    """Render the charset via atlas_app.eigs; cut signatures at BOTH
+    scales (scale-1 code_view grid, scale-2 item_list grid)."""
     proc = subprocess.Popen([EIGS, os.path.join(REPO, "tests", "atlas_app.eigs")],
                             env=ENV, cwd=REPO,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    atlas, atlas2 = {}, {}
     try:
         wid = wait_window("DMG atlas")
-        img = screenshot(wid, tmp)
-        px = img.load()
-        atlas = {}
-        for i, ch in enumerate(CHARSET):
-            row, col = divmod(i, 47)   # two lines of 47 chars
-            sig = cell_sig(px, TEXT_DX + col * CELL_W, TEXT_DY + row * LINE_H)
-            if sig:
-                atlas.setdefault(sig, ch)
+        # A frame can pass the coarse content check half-presented (the
+        # cold-present race) — re-grab until BOTH charsets cut complete.
+        for attempt in range(8):
+            img = screenshot(wid, tmp)
+            px = img.load()
+            atlas, atlas2 = {}, {}
+            for i, ch in enumerate(CHARSET):
+                row, col = divmod(i, 47)   # two lines of 47 chars
+                sig = cell_sig(px, TEXT_DX + col * CELL_W, TEXT_DY + row * LINE_H)
+                if sig:
+                    atlas.setdefault(sig, ch)
+                sig2 = cell_sig(px, 8 + col * CELL2_W, 50 + 4 + row * ITEM_H,
+                                CELL2_W, GLYPH2_H)
+                if sig2:
+                    atlas2.setdefault(sig2, ch)
+            if len(atlas) >= 80 and len(atlas2) >= 80:
+                break
+            time.sleep(0.5)
         kill_window(wid)
     finally:
         proc.terminate()
         proc.wait(timeout=10)
-    if len(atlas) < 80:
-        raise RuntimeError("atlas too small (%d glyphs) — wrong grid?" % len(atlas))
-    return atlas
+    if len(atlas) < 80 or len(atlas2) < 80:
+        raise RuntimeError("atlas too small (%d/%d glyphs) — wrong grid?"
+                           % (len(atlas), len(atlas2)))
+    return atlas, atlas2
 
 
 def decode_panel(img, atlas, rx, ry, rw):
@@ -288,6 +305,45 @@ def check_mem_panel(chrome, atlas, block_text, label, img=None):
     return True
 
 
+def parse_dis(block_text):
+    """DBG_DIS lines out of a pause block -> [(idx, text)]."""
+    return [(int(i), t) for i, t in
+            re.findall(r"^DBG_DIS (\d+) (.*)$", block_text, re.M)]
+
+
+def check_dis_panel(chrome, atlas2, block_text, label, img=None):
+    """Decode the disassembly item_list rows and diff vs the DBG_DIS seam."""
+    dx, dy, dw, dh = chrome.geom("dis")
+    lines = parse_dis(block_text)
+    if not lines:
+        raise RuntimeError("no DBG_DIS lines in pause block")
+    if img is None:
+        img = chrome.shot()
+    px = img.load()
+    ncols = (dw - 16) // CELL2_W
+    bad = []
+    for i, want in lines:
+        cy = dy + i * ITEM_H + 4
+        if cy + GLYPH2_H >= img.size[1]:
+            break
+        out = []
+        for col in range(ncols):
+            cx = dx + 8 + col * CELL2_W
+            if cx + CELL2_W >= img.size[0]:
+                break
+            sig = cell_sig(px, cx, cy, CELL2_W, GLYPH2_H)
+            out.append(atlas2.get(sig, " " if sig == 0 else "?"))
+        got = "".join(out).rstrip()
+        if got != want.rstrip():
+            bad.append((i, want.rstrip(), got))
+    if bad:
+        print("FAIL: %s — %d disasm rows diverge (first: #%d want %r got %r)"
+              % (label, len(bad), bad[0][0], bad[0][1], bad[0][2]))
+        return False
+    print("PASS: %s — %d disasm rows decode byte-identical" % (label, len(lines)))
+    return True
+
+
 def check_panel(chrome, atlas, dump_lines, label):
     rx, ry, rw, rh = chrome.geom("regs")
     img = chrome.shot()
@@ -306,8 +362,9 @@ def check_panel(chrome, atlas, dump_lines, label):
 
 def main():
     tmp = tempfile.mkdtemp()
-    atlas = build_atlas(tmp)
-    print("atlas: %d glyph signatures" % len(atlas))
+    atlas, atlas2 = build_atlas(tmp)
+    print("atlas: %d + %d glyph signatures (scale 1 + 2)"
+          % (len(atlas), len(atlas2)))
     ok = True
 
     # ---- phases 1+2: break-pause decode, then real-input stepping ----
@@ -316,6 +373,7 @@ def main():
         d1, b1 = c.wait_blocks(1, reason="paused")
         ok &= check_panel(c, atlas, d1, "auto-break pause")
         ok &= check_mem_panel(c, atlas, b1, "auto-break memory panel")
+        ok &= check_dis_panel(c, atlas2, b1, "auto-break disasm panel")
 
         # Click-away guard: a click on the LCD center must not step/dump.
         rx, ry, rw, rh = c.geom("regs")
@@ -376,6 +434,52 @@ def main():
             ok = False
         ok &= check_panel(c, atlas, d3, "after mouse Run->Pause (CYC %d)" % cyc3)
         ok &= check_mem_panel(c, atlas, b3, "post-resume memory panel")
+
+        # ---- breakpoint round-trip, all through real input ----
+        # Click disasm line 0 (the current PC) to arm a bp there; the
+        # program is inside a busy loop, so after Run it must return to
+        # that address and the chrome must pause with reason=breakpoint.
+        pc3 = d3[3].split("PC=")[1].strip()
+        dxg, dyg, dwg, dhg = c.geom("dis")
+        c.click_at(dxg + dwg // 2, dyg + ITEM_H // 2 - 1)
+        t0 = time.time()
+        bp_set = None
+        while time.time() - t0 < 10:
+            m = re.findall(r"^DBG_BP ([0-9A-Fa-f]{4}) 1$", c.read_log(), re.M)
+            if m:
+                bp_set = m[-1]
+                break
+            time.sleep(0.2)
+        if bp_set is None or bp_set.upper() != pc3.upper():
+            print("FAIL: bp click armed %r, wanted PC %r" % (bp_set, pc3))
+            ok = False
+        else:
+            print("PASS: bp click armed at PC %s" % bp_set)
+        c.click("btn_pause")          # Run — must trap at the bp
+        d4, b4 = c.wait_blocks(4, reason="breakpoint")
+        pc4 = d4[3].split("PC=")[1].strip()
+        if pc4.upper() != pc3.upper():
+            print("FAIL: breakpoint paused at PC %s, bp was %s" % (pc4, pc3))
+            ok = False
+        else:
+            print("PASS: breakpoint trapped at PC %s (CYC %s)"
+                  % (pc4, d4[0].split("=")[1]))
+        ok &= check_panel(c, atlas, d4, "at breakpoint")
+        ok &= check_dis_panel(c, atlas2, b4, "disasm panel at breakpoint")
+        # Click line 0 again: clears the bp.
+        c.click_at(dxg + dwg // 2, dyg + ITEM_H // 2 - 1)
+        t0 = time.time()
+        cleared = False
+        while time.time() - t0 < 10:
+            if re.search(r"^DBG_BP %s 0$" % pc3, c.read_log(), re.M | re.I):
+                cleared = True
+                break
+            time.sleep(0.2)
+        if cleared:
+            print("PASS: bp click-again cleared")
+        else:
+            print("FAIL: bp was not cleared by the second click")
+            ok = False
     finally:
         c.close()
 
@@ -404,6 +508,18 @@ def main():
             ok = False
         else:
             print("PASS: planted mem fault caught")
+    finally:
+        c.close()
+
+    # ---- phase 5: the planted DISASM fault MUST be caught ----
+    c = Chrome(tmp, ["--break-cycle", "400000", "--plant-dis-fault"])
+    try:
+        _, b = c.wait_blocks(1, reason="paused")
+        if check_dis_panel(c, atlas2, b, "(plant probe, must fail)"):
+            print("FAIL: planted disasm fault NOT caught — the dis checker is blind")
+            ok = False
+        else:
+            print("PASS: planted disasm fault caught")
     finally:
         c.close()
 

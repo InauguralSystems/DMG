@@ -1,0 +1,183 @@
+# lint: loaded-by ../dmg.eigs -- module fragment: dmg.eigs composes the siblings (#460)
+# ============================================================
+# SM83 disassembler (#53) — pure reader, algorithmic decode
+# ============================================================
+# disasm_one(reader, addr) -> {"text", "len", "flow"} over a byte-reader
+# callback (the hex_view contract: reader(addr) -> 0..255), so it works
+# on any byte source and never touches emulator state.
+#
+# Decode is by octal fields (x=op>>6, y=(op>>3)&7, z=op&7) — the SM83
+# opcode map is regular enough that the table IS the algorithm; the CB
+# page is fully computed.
+#
+# Oracle honesty (tests/run_disasm_oracle.sh): instruction LENGTHS are
+# verified against the live CPU — for every straight-line instruction
+# the debug engine executes, PC must advance by exactly this module's
+# len (flow=1 instructions excused). That gate has real teeth (a wrong
+# operand size desyncs immediately) and is validated by a planted
+# wrong-length fault. MNEMONIC text has no external oracle on this box
+# — tests/disasm_golden.txt is a GOLDEN MASTER: it pins regressions, it
+# does not prove correctness.
+
+_dis_r8 is ["B", "C", "D", "E", "H", "L", "(HL)", "A"]
+_dis_rp is ["BC", "DE", "HL", "SP"]
+_dis_rp2 is ["BC", "DE", "HL", "AF"]
+_dis_cc is ["NZ", "Z", "NC", "C"]
+_dis_alu is ["ADD A,", "ADC A,", "SUB ", "SBC A,", "AND ", "XOR ", "OR ", "CP "]
+_dis_rot is ["RLC", "RRC", "RL", "RR", "SLA", "SRA", "SWAP", "SRL"]
+_dis_x0z7 is ["RLCA", "RRCA", "RLA", "RRA", "DAA", "CPL", "SCF", "CCF"]
+
+# Planted-fault hook for the length oracle (tests only): when 1, LD r,d8
+# reports len 1 instead of 2 — the oracle MUST catch the desync.
+_dis_plant is [0]
+
+define _dis_d8(reader, addr) as:
+    return hex of [(reader of ((addr + 1) & 0xFFFF)), 2]
+
+define _dis_d16(reader, addr) as:
+    local lo is reader of ((addr + 1) & 0xFFFF)
+    local hi is reader of ((addr + 2) & 0xFFFF)
+    return hex of [(hi << 8) | lo, 4]
+
+define _dis_r8target(reader, addr) as:
+    local off is reader of ((addr + 1) & 0xFFFF)
+    if off > 127:
+        off is off - 256
+    return hex of [(addr + 2 + off) & 0xFFFF, 4]
+
+define disasm_one(reader, addr) as:
+    local op is reader of addr
+    local x is op >> 6
+    local y is (op >> 3) & 7
+    local z is op & 7
+
+    if op == 0xCB:
+        local cb is reader of ((addr + 1) & 0xFFFF)
+        local cx is cb >> 6
+        local cy is (cb >> 3) & 7
+        local cz is cb & 7
+        local reg is _dis_r8[cz]
+        if cx == 0:
+            return {"text": f"{_dis_rot[cy]} {reg}", "len": 2, "flow": 0}
+        if cx == 1:
+            return {"text": f"BIT {cy},{reg}", "len": 2, "flow": 0}
+        if cx == 2:
+            return {"text": f"RES {cy},{reg}", "len": 2, "flow": 0}
+        return {"text": f"SET {cy},{reg}", "len": 2, "flow": 0}
+
+    if x == 0:
+        if z == 0:
+            if y == 0:
+                return {"text": "NOP", "len": 1, "flow": 0}
+            if y == 1:
+                return {"text": f"LD (${_dis_d16 of [reader, addr]}),SP", "len": 3, "flow": 0}
+            if y == 2:
+                return {"text": "STOP", "len": 2, "flow": 0}
+            if y == 3:
+                return {"text": f"JR ${_dis_r8target of [reader, addr]}", "len": 2, "flow": 1}
+            return {"text": f"JR {_dis_cc[y - 4]},${_dis_r8target of [reader, addr]}", "len": 2, "flow": 1}
+        if z == 1:
+            if (y & 1) == 0:
+                return {"text": f"LD {_dis_rp[y >> 1]},${_dis_d16 of [reader, addr]}", "len": 3, "flow": 0}
+            return {"text": f"ADD HL,{_dis_rp[y >> 1]}", "len": 1, "flow": 0}
+        if z == 2:
+            if y == 0:
+                return {"text": "LD (BC),A", "len": 1, "flow": 0}
+            if y == 1:
+                return {"text": "LD A,(BC)", "len": 1, "flow": 0}
+            if y == 2:
+                return {"text": "LD (DE),A", "len": 1, "flow": 0}
+            if y == 3:
+                return {"text": "LD A,(DE)", "len": 1, "flow": 0}
+            if y == 4:
+                return {"text": "LD (HL+),A", "len": 1, "flow": 0}
+            if y == 5:
+                return {"text": "LD A,(HL+)", "len": 1, "flow": 0}
+            if y == 6:
+                return {"text": "LD (HL-),A", "len": 1, "flow": 0}
+            return {"text": "LD A,(HL-)", "len": 1, "flow": 0}
+        if z == 3:
+            if (y & 1) == 0:
+                return {"text": f"INC {_dis_rp[y >> 1]}", "len": 1, "flow": 0}
+            return {"text": f"DEC {_dis_rp[y >> 1]}", "len": 1, "flow": 0}
+        if z == 4:
+            return {"text": f"INC {_dis_r8[y]}", "len": 1, "flow": 0}
+        if z == 5:
+            return {"text": f"DEC {_dis_r8[y]}", "len": 1, "flow": 0}
+        if z == 6:
+            local ldlen is 2
+            if _dis_plant[0] == 1:
+                ldlen is 1
+            return {"text": f"LD {_dis_r8[y]},${_dis_d8 of [reader, addr]}", "len": ldlen, "flow": 0}
+        return {"text": _dis_x0z7[y], "len": 1, "flow": 0}
+
+    if x == 1:
+        if op == 0x76:
+            return {"text": "HALT", "len": 1, "flow": 1}
+        return {"text": f"LD {_dis_r8[y]},{_dis_r8[z]}", "len": 1, "flow": 0}
+
+    if x == 2:
+        return {"text": f"{_dis_alu[y]}{_dis_r8[z]}", "len": 1, "flow": 0}
+
+    # x == 3
+    if z == 0:
+        if y < 4:
+            return {"text": f"RET {_dis_cc[y]}", "len": 1, "flow": 1}
+        if y == 4:
+            return {"text": f"LDH (${_dis_d8 of [reader, addr]}),A", "len": 2, "flow": 0}
+        if y == 5:
+            return {"text": f"ADD SP,${_dis_d8 of [reader, addr]}", "len": 2, "flow": 0}
+        if y == 6:
+            return {"text": f"LDH A,(${_dis_d8 of [reader, addr]})", "len": 2, "flow": 0}
+        return {"text": f"LD HL,SP+${_dis_d8 of [reader, addr]}", "len": 2, "flow": 0}
+    if z == 1:
+        if (y & 1) == 0:
+            return {"text": f"POP {_dis_rp2[y >> 1]}", "len": 1, "flow": 0}
+        if y == 1:
+            return {"text": "RET", "len": 1, "flow": 1}
+        if y == 3:
+            return {"text": "RETI", "len": 1, "flow": 1}
+        if y == 5:
+            return {"text": "JP HL", "len": 1, "flow": 1}
+        return {"text": "LD SP,HL", "len": 1, "flow": 0}
+    if z == 2:
+        if y < 4:
+            return {"text": f"JP {_dis_cc[y]},${_dis_d16 of [reader, addr]}", "len": 3, "flow": 1}
+        if y == 4:
+            return {"text": "LD (C),A", "len": 1, "flow": 0}
+        if y == 5:
+            return {"text": f"LD (${_dis_d16 of [reader, addr]}),A", "len": 3, "flow": 0}
+        if y == 6:
+            return {"text": "LD A,(C)", "len": 1, "flow": 0}
+        return {"text": f"LD A,(${_dis_d16 of [reader, addr]})", "len": 3, "flow": 0}
+    if z == 3:
+        if y == 0:
+            return {"text": f"JP ${_dis_d16 of [reader, addr]}", "len": 3, "flow": 1}
+        if y == 6:
+            return {"text": "DI", "len": 1, "flow": 0}
+        if y == 7:
+            return {"text": "EI", "len": 1, "flow": 0}
+        return {"text": f"?? {hex of [op, 2]}", "len": 1, "flow": 0}
+    if z == 4:
+        if y < 4:
+            return {"text": f"CALL {_dis_cc[y]},${_dis_d16 of [reader, addr]}", "len": 3, "flow": 1}
+        return {"text": f"?? {hex of [op, 2]}", "len": 1, "flow": 0}
+    if z == 5:
+        if (y & 1) == 0:
+            return {"text": f"PUSH {_dis_rp2[y >> 1]}", "len": 1, "flow": 0}
+        if y == 1:
+            return {"text": f"CALL ${_dis_d16 of [reader, addr]}", "len": 3, "flow": 1}
+        return {"text": f"?? {hex of [op, 2]}", "len": 1, "flow": 0}
+    if z == 6:
+        return {"text": f"{_dis_alu[y]}${_dis_d8 of [reader, addr]}", "len": 2, "flow": 0}
+    return {"text": f"RST ${hex of [y * 8, 2]}", "len": 1, "flow": 1}
+
+# Forward window from addr: n lines of "ADDR  TEXT" (the panel's shape).
+define disasm_window(reader, addr, n) as:
+    local lines is []
+    local a is addr & 0xFFFF
+    for i in range of n:
+        local d is disasm_one of [reader, a]
+        append of [lines, {"addr": a, "text": f"{hex of [a, 4]}  {d.text}", "len": d.len}]
+        a is (a + d.len) & 0xFFFF
+    return lines
