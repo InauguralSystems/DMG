@@ -1,0 +1,152 @@
+# lint: loaded-by ../dmg.eigs -- module fragment: dmg.eigs composes the siblings (#460)
+# ============================================================
+# Debug engine (#53) — single-instruction stepper + canonical state dump
+# ============================================================
+# The debugger chrome's STEP path and the equivalence gate both live on
+# this module. debug_step_instr is deliberately NOT twin-marked: it is the
+# slow, readable form of the inlined hot-loop bodies, and its guard is
+# semantic, not textual — tests/run_debug_equivalence.sh byte-diffs the
+# state dump of a run through this stepper against the same run through
+# run_headless_loop at the same cycle bound. If this file and the twins
+# ever disagree, that gate fails.
+#
+# Headless-safe: no gfx builtins, loaded unconditionally by dmg.eigs.
+
+# One instruction (or one halted/stopped skip): execute, drain the bus,
+# service interrupts. Returns the T-cycles consumed.
+define debug_step_instr(cpu, mem) as:
+    if cpu.halted == 1:
+        local skip is mem.lcd_next - mem.lcd_counter
+        local tac_h is mem.data[TIMER_TAC]
+        if (tac_h & 0x04) != 0:
+            local th is _tac_thresholds[tac_h & 0x03]
+            local ticks_to_overflow is 0x100 - mem.data[TIMER_TIMA]
+            local cyc_to_timer_int is (ticks_to_overflow * th) - mem.timer_counter
+            if cyc_to_timer_int <= 0:
+                cyc_to_timer_int is th
+            if cyc_to_timer_int < skip:
+                skip is cyc_to_timer_int
+        # An in-flight TIMA reload (the 4-cycle latch window) is its own
+        # interrupt boundary — don't skip past it (#29).
+        if mem.tima_reload_pending > 0 and mem.tima_reload_pending < skip:
+            skip is mem.tima_reload_pending
+        if skip < 4:
+            skip is 4
+        mem.pending_cycles += skip
+        bus_flush of [cpu, mem]
+        local int_cycles is handle_interrupts of [cpu, mem]
+        if int_cycles > 0:
+            mem.pending_cycles is int_cycles - cpu.stepped_cycles
+            bus_flush of [cpu, mem]
+        return skip + int_cycles
+
+    if cpu.stopped == 1:
+        return stop_idle of [cpu, mem]
+
+    cpu.stepped_cycles is 0
+    local op is 0
+    if cpu.halt_bug == 1:
+        cpu.halt_bug is 0
+        op is cpu_mem_read of [cpu, mem, cpu.pc]
+    else:
+        op is fetch8 of [cpu, mem]
+    _exec_ctx[2] is op
+    local cycles is dispatch of [_op_table, op, _exec_ctx]
+    if cpu.ime_delay > 0:
+        cpu.ime_delay -= 1
+        if cpu.ime_delay == 0:
+            cpu.ime is 1
+    local pc is cycles - cpu.stepped_cycles
+    if pc > 0:
+        mem.pending_cycles is pc
+        bus_flush of [cpu, mem]
+    local int_cycles2 is handle_interrupts of [cpu, mem]
+    if int_cycles2 > 0:
+        mem.pending_cycles is int_cycles2 - cpu.stepped_cycles
+        bus_flush of [cpu, mem]
+    return cycles + int_cycles2
+
+# Rolling hash over the RAM half of the address space (VRAM..HRAM raw,
+# plus banked cart RAM). ROM is constant, so this pins every mutable
+# byte the two engines could disagree on.
+define debug_mem_hash(mem) as:
+    local h is 5381
+    unobserved:
+        for i in range of 0x8000:
+            h is ((h * 131) + mem.data[0x8000 + i]) % 2147483647
+        if mem.cart_ram_len > 0:
+            for j in range of mem.cart_ram_len:
+                h is ((h * 131) + mem.cart_ram[j]) % 2147483647
+    return h
+
+define _debug_flags_text(f) as:
+    local t is ""
+    if (f & 0x80) != 0:
+        t is t + "Z"
+    else:
+        t is t + "-"
+    if (f & 0x40) != 0:
+        t is t + "N"
+    else:
+        t is t + "-"
+    if (f & 0x20) != 0:
+        t is t + "H"
+    else:
+        t is t + "-"
+    if (f & 0x10) != 0:
+        t is t + "C"
+    else:
+        t is t + "-"
+    return t
+
+# The registers-panel text: exactly what the chrome shows when paused.
+# MMIO goes through mem_read so derived registers (STAT) read live.
+define debug_regs_text(cpu, mem, total_cycles) as:
+    local lines is []
+    append of [lines, f"CYC={total_cycles}"]
+    append of [lines, f"AF={hex of [(cpu.a << 8) | cpu.f, 4]} BC={hex of [(cpu.b << 8) | cpu.c, 4]}"]
+    append of [lines, f"DE={hex of [(cpu.d << 8) | cpu.e, 4]} HL={hex of [(cpu.h << 8) | cpu.l, 4]}"]
+    append of [lines, f"SP={hex of [cpu.sp, 4]} PC={hex of [cpu.pc, 4]}"]
+    append of [lines, f"FLAGS={_debug_flags_text of cpu.f} IME={cpu.ime}"]
+    append of [lines, f"IE={hex of [mem.ie & 0xFF, 2]} IF={hex of [mem.if_reg & 0x1F, 2]}"]
+    append of [lines, f"HALT={cpu.halted} STOP={cpu.stopped}"]
+    append of [lines, f"LCDC={hex of [mem_read of [mem, 0xFF40], 2]} STAT={hex of [mem_read of [mem, 0xFF41], 2]}"]
+    append of [lines, f"LY={hex of [mem_read of [mem, 0xFF44], 2]} DIV={hex of [mem_read of [mem, 0xFF04], 2]}"]
+    append of [lines, f"TIMA={hex of [mem_read of [mem, 0xFF05], 2]} TMA={hex of [mem_read of [mem, 0xFF06], 2]}"]
+    append of [lines, f"TAC={hex of [mem_read of [mem, 0xFF07], 2]} ROM={hex of [mem.rom_bank & 0xFF, 2]}"]
+    return join of [lines, "\n"]
+
+# The full canonical dump = the panel text + the oracle-only tail
+# (serial length + memory hash). tests/run_debug_equivalence.sh diffs
+# this whole block; the render-decode oracle reads the panel prefix.
+define debug_state_dump(cpu, mem, total_cycles) as:
+    local head is debug_regs_text of [cpu, mem, total_cycles]
+    local tail is f"SERLEN={len of mem.serial_output}\nMEMSUM={debug_mem_hash of mem}"
+    return f"{head}\n{tail}"
+
+# Headless run loop on the debug stepper — the equivalence gate's other
+# half. Mirrors run_headless_loop's serial/RAM reporting so a Blargg ROM
+# driven through the debug engine prints the same verdict lines.
+define run_debug_engine_loop(cpu, mem, max_cycles, total_cycles_in) as:
+    local tc is total_cycles_in
+    local psl is 0
+    local pro is 0
+    unobserved:
+      loop while tc < max_cycles:
+        tc += debug_step_instr of [cpu, mem]
+        if (len of mem.serial_output) > psl:
+            psl is len of mem.serial_output
+            if contains of [mem.serial_output, "Passed"]:
+                print of f"\n{mem.serial_output}"
+                break
+            if contains of [mem.serial_output, "Failed"]:
+                print of f"\n{mem.serial_output}"
+                break
+        if tc % 1000000 < 100:
+            if blargg_ram_output_ready of mem:
+                local ram_result is mem_read of [mem, 0xA000]
+                if ram_result != 0x80:
+                    print_blargg_ram_output of mem
+                    pro is 1
+                    break
+    return {"total_cycles": tc, "printed_ram_output": pro}

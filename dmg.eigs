@@ -13,6 +13,7 @@ load_file of "src/lcd.eigs"
 load_file of "src/opcodes.eigs"
 load_file of "src/joypad.eigs"
 load_file of "src/ppu.eigs"
+load_file of "src/debug.eigs"
 
 # ============================================================
 # Timer registers
@@ -212,6 +213,11 @@ frameskip is 2
 gfx_scale is 3
 input_script is ""
 render_probe is 0
+dump_state is 0
+engine is "hot"
+debug_mode is 0
+break_cycle is -1
+plant_render_fault is 0
 
 i is 1
 loop while i < (len of argv):
@@ -236,6 +242,19 @@ loop while i < (len of argv):
         render_probe is 1
     elif argv[i] == "--strict-illegal":
         _strict_illegal[0] is 1
+    elif argv[i] == "--dump-state":
+        dump_state is 1
+    elif argv[i] == "--engine" and i + 1 < (len of argv):
+        i += 1
+        engine is argv[i]
+    elif argv[i] == "--debug":
+        debug_mode is 1
+        gfx_mode is 1
+    elif argv[i] == "--break-cycle" and i + 1 < (len of argv):
+        i += 1
+        break_cycle is floor of (num of argv[i])
+    elif argv[i] == "--plant-render-fault":
+        plant_render_fault is 1
     i += 1
 
 # sort_by key for input events [cycle, button, state]. apply_input_events
@@ -488,7 +507,123 @@ t0 is monotonic_ms of null
 # Graphical mode
 # ============================================================
 
-if gfx_mode == 1:
+# One video frame (70224 T-cycles) of the inlined hot loop, shared by the
+# plain gfx mode and the --debug chrome's RUN state. Called once per frame,
+# so the lift costs nothing; the temporaries land in bytecode-frame slots
+# (the run_headless_loop pattern). The twin-marked copies moved here intact.
+define run_frame(cpu, mem) as:
+    frame_cycles is 0
+    unobserved:
+      loop while frame_cycles < CYCLES_PER_FRAME:
+        if cpu.halted == 1:
+            # Default skip to next LCD line boundary, but cap to next pending
+            # timer interrupt boundary — mirrors the headless halted path
+            # (#28: this cap was applied there and silently not here).
+            # twin: halted-skip copy=gfx map frame_cycles=tc
+            skip is mem.lcd_next - mem.lcd_counter
+            tac_h is mem.data[TIMER_TAC]
+            if (tac_h & 0x04) != 0:
+                th is _tac_thresholds[tac_h & 0x03]
+                ticks_to_overflow is 0x100 - mem.data[TIMER_TIMA]
+                cyc_to_timer_int is (ticks_to_overflow * th) - mem.timer_counter
+                if cyc_to_timer_int <= 0:
+                    cyc_to_timer_int is th
+                if cyc_to_timer_int < skip:
+                    skip is cyc_to_timer_int
+            # An in-flight TIMA reload (the 4-cycle latch window) is its own
+            # interrupt boundary — don't skip past it (#29).
+            if mem.tima_reload_pending > 0 and mem.tima_reload_pending < skip:
+                skip is mem.tima_reload_pending
+            if skip < 4:
+                skip is 4
+            mem.pending_cycles += skip
+            bus_flush of [cpu, mem]
+            frame_cycles += skip
+            int_cycles is handle_interrupts of [cpu, mem]
+            if int_cycles > 0:
+                mem.pending_cycles is int_cycles - cpu.stepped_cycles
+                bus_flush of [cpu, mem]
+            frame_cycles += int_cycles
+            # twin: halted-skip end
+            continue
+
+        if cpu.stopped == 1:
+            frame_cycles += stop_idle of [cpu, mem]
+            continue
+
+        # Inlined exec_op + post-instruction bus flush (matches headless loop).
+        # twin: exec copy=gfx
+        cpu.stepped_cycles is 0
+        if cpu.halt_bug == 1:
+            cpu.halt_bug is 0
+            op is cpu_mem_read of [cpu, mem, cpu.pc]
+        else:
+            op is fetch8 of [cpu, mem]
+        _exec_ctx[2] is op
+        cycles is dispatch of [_op_table, op, _exec_ctx]
+        if cpu.ime_delay > 0:
+            cpu.ime_delay -= 1
+            if cpu.ime_delay == 0:
+                cpu.ime is 1
+        # twin: exec end
+        frame_cycles += cycles
+
+        local pc is cycles - cpu.stepped_cycles
+        if pc > 0:
+            cpu.stepped_cycles += pc
+            mem.pending_cycles is 0
+            # twin: bus-tick copy=gfx map pc=cycles tac_p=tac threshold_p=threshold tima_p=tima
+            mem.div_counter += pc
+            if mem.div_counter >= 256:
+                mem.data[TIMER_DIV] is (mem.data[TIMER_DIV] + floor of (mem.div_counter / 256)) & 0xFF
+                mem.div_counter is mem.div_counter % 256
+            if mem.tima_reload_pending > 0:
+                mem.tima_reload_pending -= pc
+                if mem.tima_reload_pending <= 0:
+                    mem.data[TIMER_TIMA] is mem.data[TIMER_TMA]
+                    mem.if_reg |= 0x04
+                    mem.tima_reload_pending is 0
+            tac_p is mem.data[TIMER_TAC]
+            if (tac_p & 0x04) != 0:
+                threshold_p is _tac_thresholds[tac_p & 0x03]
+                mem.timer_counter += pc
+                loop while mem.timer_counter >= threshold_p:
+                    mem.timer_counter -= threshold_p
+                    tima_p is mem.data[TIMER_TIMA] + 1
+                    if tima_p > 0xFF:
+                        mem.data[TIMER_TIMA] is 0
+                        mem.tima_reload_pending is 4
+                    else:
+                        mem.data[TIMER_TIMA] is tima_p
+            mem.lcd_counter += pc
+            if mem.lcd_counter >= mem.lcd_next:
+                lcd_event of mem
+            if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
+                apu_step of [mem, pc]
+            # twin: bus-tick end
+
+        int_cycles is handle_interrupts of [cpu, mem]
+        if int_cycles > 0:
+            mem.pending_cycles is int_cycles - cpu.stepped_cycles
+            bus_flush of [cpu, mem]
+        frame_cycles += int_cycles
+
+    return frame_cycles
+
+# Debugger chrome (#53): dock UI around the LCD. Loaded lazily so plain
+# gfx and headless runs never touch lib/ui (and run on a lib without it).
+if gfx_mode == 1 and debug_mode == 1:
+    ppu is new_ppu of null
+    ppu.frame_skip is 1
+    _gfx_ppu is ppu
+    joy is new_joypad of null
+    mem.joypad is joy
+    load_file of "lib/ui.eigs"
+    load_file of "debugger.eigs"
+    DBG.plant_fault is plant_render_fault
+    total_cycles is debugger_run of [cpu, mem, ppu, joy, gfx_scale, break_cycle, gfx_frame_limit]
+    print of f"\nDebugger exited: cycles={total_cycles} frames={ppu.frame_count}"
+elif gfx_mode == 1:
     ppu is new_ppu of null
     ppu.frame_skip is frameskip
     _gfx_ppu is ppu
@@ -507,103 +642,7 @@ if gfx_mode == 1:
 
     loop while running == 1:
         # Run one frame of CPU (70224 T-cycles)
-        frame_cycles is 0
-        unobserved:
-          loop while frame_cycles < CYCLES_PER_FRAME:
-            if cpu.halted == 1:
-                # Default skip to next LCD line boundary, but cap to next pending
-                # timer interrupt boundary — mirrors the headless halted path
-                # (#28: this cap was applied there and silently not here).
-                # twin: halted-skip copy=gfx map frame_cycles=tc
-                skip is mem.lcd_next - mem.lcd_counter
-                tac_h is mem.data[TIMER_TAC]
-                if (tac_h & 0x04) != 0:
-                    th is _tac_thresholds[tac_h & 0x03]
-                    ticks_to_overflow is 0x100 - mem.data[TIMER_TIMA]
-                    cyc_to_timer_int is (ticks_to_overflow * th) - mem.timer_counter
-                    if cyc_to_timer_int <= 0:
-                        cyc_to_timer_int is th
-                    if cyc_to_timer_int < skip:
-                        skip is cyc_to_timer_int
-                # An in-flight TIMA reload (the 4-cycle latch window) is its own
-                # interrupt boundary — don't skip past it (#29).
-                if mem.tima_reload_pending > 0 and mem.tima_reload_pending < skip:
-                    skip is mem.tima_reload_pending
-                if skip < 4:
-                    skip is 4
-                mem.pending_cycles += skip
-                bus_flush of [cpu, mem]
-                frame_cycles += skip
-                int_cycles is handle_interrupts of [cpu, mem]
-                if int_cycles > 0:
-                    mem.pending_cycles is int_cycles - cpu.stepped_cycles
-                    bus_flush of [cpu, mem]
-                frame_cycles += int_cycles
-                # twin: halted-skip end
-                continue
-
-            if cpu.stopped == 1:
-                frame_cycles += stop_idle of [cpu, mem]
-                continue
-
-            # Inlined exec_op + post-instruction bus flush (matches headless loop).
-            # twin: exec copy=gfx
-            cpu.stepped_cycles is 0
-            if cpu.halt_bug == 1:
-                cpu.halt_bug is 0
-                op is cpu_mem_read of [cpu, mem, cpu.pc]
-            else:
-                op is fetch8 of [cpu, mem]
-            _exec_ctx[2] is op
-            cycles is dispatch of [_op_table, op, _exec_ctx]
-            if cpu.ime_delay > 0:
-                cpu.ime_delay -= 1
-                if cpu.ime_delay == 0:
-                    cpu.ime is 1
-            # twin: exec end
-            frame_cycles += cycles
-
-            local pc is cycles - cpu.stepped_cycles
-            if pc > 0:
-                cpu.stepped_cycles += pc
-                mem.pending_cycles is 0
-                # twin: bus-tick copy=gfx map pc=cycles tac_p=tac threshold_p=threshold tima_p=tima
-                mem.div_counter += pc
-                if mem.div_counter >= 256:
-                    mem.data[TIMER_DIV] is (mem.data[TIMER_DIV] + floor of (mem.div_counter / 256)) & 0xFF
-                    mem.div_counter is mem.div_counter % 256
-                if mem.tima_reload_pending > 0:
-                    mem.tima_reload_pending -= pc
-                    if mem.tima_reload_pending <= 0:
-                        mem.data[TIMER_TIMA] is mem.data[TIMER_TMA]
-                        mem.if_reg |= 0x04
-                        mem.tima_reload_pending is 0
-                tac_p is mem.data[TIMER_TAC]
-                if (tac_p & 0x04) != 0:
-                    threshold_p is _tac_thresholds[tac_p & 0x03]
-                    mem.timer_counter += pc
-                    loop while mem.timer_counter >= threshold_p:
-                        mem.timer_counter -= threshold_p
-                        tima_p is mem.data[TIMER_TIMA] + 1
-                        if tima_p > 0xFF:
-                            mem.data[TIMER_TIMA] is 0
-                            mem.tima_reload_pending is 4
-                        else:
-                            mem.data[TIMER_TIMA] is tima_p
-                mem.lcd_counter += pc
-                if mem.lcd_counter >= mem.lcd_next:
-                    lcd_event of mem
-                if mem.apu_ch1_cycles > 0 or mem.apu_ch2_cycles > 0:
-                    apu_step of [mem, pc]
-                # twin: bus-tick end
-
-            int_cycles is handle_interrupts of [cpu, mem]
-            if int_cycles > 0:
-                mem.pending_cycles is int_cycles - cpu.stepped_cycles
-                bus_flush of [cpu, mem]
-            frame_cycles += int_cycles
-
-        total_cycles += frame_cycles
+        total_cycles += run_frame of [cpu, mem]
 
         # Render frame (with frame skip)
         ppu.frame_count += 1
@@ -660,9 +699,15 @@ if gfx_mode == 0:
     if (len of input_events) > 0:
         headless_joy is new_joypad of null
         mem.joypad is headless_joy
-    loop_result is run_headless_loop of [cpu, mem, max_cycles, input_events, total_cycles]
+    input_events_applied is 0
+    if engine == "debug":
+        # The equivalence-gate path (#53): same run, non-inlined stepper.
+        assert of [(len of input_events) == 0, "--engine debug does not take --input-script"]
+        loop_result is run_debug_engine_loop of [cpu, mem, max_cycles, total_cycles]
+    else:
+        loop_result is run_headless_loop of [cpu, mem, max_cycles, input_events, total_cycles]
+        input_events_applied is loop_result["input_events_applied"]
     total_cycles is loop_result["total_cycles"]
-    input_events_applied is loop_result["input_events_applied"]
     printed_ram_output is loop_result["printed_ram_output"]
 
     print of f"\nLoop exited: cycles={total_cycles} halted={cpu.halted} stopped={cpu.stopped} PC={cpu.pc}"
@@ -684,3 +729,6 @@ if gfx_mode == 0:
     if render_probe == 1:
         render_stats is render_probe_stats of mem
         print of f"Render probe: nonzero={render_stats[0]} unique={render_stats[1]} hash={render_stats[2]} c0={render_stats[3]} c1={render_stats[4]} c2={render_stats[5]} c3={render_stats[6]}"
+    if dump_state == 1:
+        print of "=== STATE DUMP ==="
+        print of (debug_state_dump of [cpu, mem, total_cycles])

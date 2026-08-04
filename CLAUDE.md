@@ -69,8 +69,19 @@ POKEMON_RED_ROM=/path/to/pokemon-red.gb tests/run_pokemon_red_smoke.sh
 # Bounded gfx smoke (uses SDL_VIDEODRIVER=dummy by default)
 EIGENSCRIPT_GFX=/path/to/eigenscript-gfx tests/run_gfx_smoke.sh
 
+# Debug-engine equivalence gate (#53) — CI; headless, any pin
+tests/run_debug_equivalence.sh
+
+# Debugger-chrome UI oracle (#53) — render-decode + real-mouse; SKIPs
+# while the pinned lib predates dock, self-arms after the pin bump
+tests/run_debug_ui_oracle.sh
+
 # Play
 $EIGS_GFX dmg.eigs roms/pokemon-red.gb --gfx --scale 3 --frameskip 2
+
+# Debug (dock chrome: registers + pause/step; needs dock in lib —
+# post-v0.37.0 main). p=pause/run, s=step instr, f=step frame
+$EIGS_GFX dmg.eigs roms/pokemon-red.gb --debug --scale 2
 ```
 
 Keys: arrows = D-pad, Z = A, X = B, Return = Start, Backspace =
@@ -85,6 +96,15 @@ that aren't obvious:)
   event-armed HBlank source**.
 - `tests/check_twins.sh` — the twin gate: the inlined hot-loop copies must
   not drift (#20).
+- `src/debug.eigs` + `debugger.eigs` — the debugger (#53): non-inlined
+  stepper + canonical state dump (engine side, headless-safe), and the
+  dock chrome (loaded only under `--debug`). The stepper is deliberately
+  NOT twin-marked — its guard is `tests/run_debug_equivalence.sh`, which
+  byte-diffs its state dump against the hot engine at the same cycle
+  bound. The chrome is a pure reader: RUN drives `run_frame` (the same
+  inlined hot loop as gfx mode), STEP drives `debug_step_instr`; every
+  pause/step emits the dump + panel geometry on stdout, which is the
+  seam `tests/ui_debug_oracle.py` (render-decode + real-mouse) reads.
 - `roms/` — Blargg ROMs + `pokemon-red.gb`, local and gitignored.
 - `GAPS.md` — the `GAP-DMG-NNN` ledger (ten resolved upstream).
 - `BASELINE.md` — T3200 timings with methodology + JIT contribution.
