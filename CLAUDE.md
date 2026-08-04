@@ -96,15 +96,23 @@ that aren't obvious:)
   event-armed HBlank source**.
 - `tests/check_twins.sh` — the twin gate: the inlined hot-loop copies must
   not drift (#20).
-- `src/debug.eigs` + `debugger.eigs` — the debugger (#53): non-inlined
-  stepper + canonical state dump (engine side, headless-safe), and the
-  dock chrome (loaded only under `--debug`). The stepper is deliberately
-  NOT twin-marked — its guard is `tests/run_debug_equivalence.sh`, which
+- `src/debug.eigs` + `src/disasm.eigs` + `debugger.eigs` — the debugger
+  (#53): non-inlined stepper + canonical state dump + pure SM83
+  disassembler (engine side, headless-safe), and the dock chrome
+  (loaded only under `--debug`): registers, pause/step-instr/step-frame,
+  disassembly with click-to-toggle breakpoints (`--bp` presets), memory
+  hex view, tile viewer, OAM panel. The stepper is deliberately NOT
+  twin-marked — its guard is `tests/run_debug_equivalence.sh`, which
   byte-diffs its state dump against the hot engine at the same cycle
-  bound. The chrome is a pure reader: RUN drives `run_frame` (the same
-  inlined hot loop as gfx mode), STEP drives `debug_step_instr`; every
-  pause/step emits the dump + panel geometry on stdout, which is the
-  seam `tests/ui_debug_oracle.py` (render-decode + real-mouse) reads.
+  bound, checks disasm lengths against 172K+ live instructions, and
+  pins mnemonics via `tests/disasm_golden.txt` (a golden master). The
+  chrome is a pure reader: RUN drives `run_frame` (the same inlined hot
+  loop as gfx mode; with breakpoints armed it steps the debug engine so
+  PC is visible), STEP drives `debug_step_instr`; every pause/step
+  emits the dump + panel geometry + per-panel seams (`DBG_MEM`,
+  `DBG_DIS`, `DBG_TILEDATA`, `DBG_OAM`) on stdout, which
+  `tests/ui_debug_oracle.py` (render-decode + real-mouse, five planted
+  faults) reads.
 - `roms/` — Blargg ROMs + `pokemon-red.gb`, local and gitignored.
 - `GAPS.md` — the `GAP-DMG-NNN` ledger (ten resolved upstream).
 - `BASELINE.md` — T3200 timings with methodology + JIT contribution.
