@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Debugger (#53, fleet UI ladder rung 5 slice 3, first artifact)
+- `--debug` opens a dock-workspace debugger chrome (needs the dock
+  widget — EigenScript main post-v0.37.0): center = live LCD, west =
+  registers panel + Pause/Run, Step-instr, Step-frame controls;
+  `--break-cycle N` auto-pauses; space/s/f keyboard equivalents
+- `src/debug.eigs`: non-inlined single-instruction stepper + canonical
+  state dump; `--dump-state` and `--engine debug` on the headless CLI
+- `run_frame(cpu, mem)` lifted out of the gfx loop (twin markers moved
+  intact) and shared by gfx mode and the chrome's RUN state
+- Oracles: `tests/run_debug_equivalence.sh` (hot vs debug engine dump
+  byte-diff + a Blargg ROM Passed through the debug engine; CI, any
+  pin) and `tests/run_debug_ui_oracle.sh` (registers panel decoded
+  back out of real screenshots and byte-diffed against the core dump,
+  real-pointer pause/step flow, planted render fault caught; SKIPs
+  until the pin carries dock, then self-arms as REQUIRED)
+
 ### Accuracy
 - STAT register + LCD mode machine and serial-complete IRQ
 - Window internal line counter, P1 upper bits, and illegal-opcode hex

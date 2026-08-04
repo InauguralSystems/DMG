@@ -1,3 +1,4 @@
+# lint: loaded-by ../dmg.eigs -- module fragment: dmg.eigs composes the siblings (#460)
 # ============================================================
 # Debug engine (#53) — single-instruction stepper + canonical state dump
 # ============================================================

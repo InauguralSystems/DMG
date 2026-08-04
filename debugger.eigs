@@ -65,16 +65,26 @@ define _dbg_emit_state(reason) as:
     print of (debug_state_dump of [DBG.cpu, DBG.mem, DBG.total])
     print of "=== END DUMP ==="
 
+# A clicked button keeps toolkit focus, and the focus path re-fires a
+# focused button on space/return ON TOP of our key handler (app_loop
+# runs both). Emulator keys must stay emulator keys — drop focus after
+# every control action (the push_modal focus-reset pattern).
+define _dbg_blur() as:
+    _ui.focused_widget is null
+    _ui.focused_input is null
+    _ui.focus_index is 0 - 1
+
 define _dbg_set_paused(v) as:
     DBG.paused is v
     if v == 1:
-        DBG.btn_pause.label is "Run"
+        DBG.btn_pause.label is "Run [p]"
         _dbg_refresh_regs of null
         _dbg_emit_state of "paused"
     else:
-        DBG.btn_pause.label is "Pause"
+        DBG.btn_pause.label is "Pause [p]"
 
 define _dbg_click_pause(b) as:
+    _dbg_blur of null
     if DBG.paused == 1:
         _dbg_set_paused of 0
     else:
@@ -93,10 +103,12 @@ define _dbg_step_frame() as:
     _dbg_emit_state of "frame"
 
 define _dbg_click_step(b) as:
+    _dbg_blur of null
     if DBG.paused == 1:
         _dbg_step_instr of null
 
 define _dbg_click_frame(b) as:
+    _dbg_blur of null
     if DBG.paused == 1:
         _dbg_step_frame of null
 
@@ -143,7 +155,7 @@ define _dbg_on_key(ev) as:
     if ev.type == "keydown":
         if ev.key == "escape":
             return 0
-        if ev.key == "space":
+        if ev.key == "p":
             _dbg_click_pause of null
             return 1
         if ev.key == "s" and DBG.paused == 1:
@@ -188,7 +200,7 @@ define debugger_run(cpu, mem, ppu, joy, scale, break_cycle, tick_limit) as:
     local controls is vbox of ["controls", 0, 0, 10, 10]
     controls.padding is 8
     controls.gap is 6
-    local btn_pause is button of ["btn_pause", 0, 0, 180, 28, "Pause", _dbg_click_pause]
+    local btn_pause is button of ["btn_pause", 0, 0, 180, 28, "Pause [p]", _dbg_click_pause]
     local btn_step is button of ["btn_step", 0, 0, 180, 28, "Step instr [s]", _dbg_click_step]
     local btn_frame is button of ["btn_frame", 0, 0, 180, 28, "Step frame [f]", _dbg_click_frame]
     DBG.btn_pause is btn_pause
