@@ -16,6 +16,7 @@ RUN apt-get update \
         git \
         libsdl2-2.0-0 \
         xvfb \
+        xauth \
         x11-apps \
         x11-utils \
         xdotool \
