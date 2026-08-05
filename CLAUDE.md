@@ -23,7 +23,7 @@ and Tidepool.
 
 ## Toolchain
 
-EigenScript is **not** vendored. Pin **v0.13.0 minimum**; **v0.37.0**
+EigenScript is **not** vendored. Pin **v0.13.0 minimum**; **v0.38.0**
 is the current tested release (`.devcontainer/Dockerfile` `EIGS_REF`).
 Two binaries matter:
 
@@ -79,8 +79,8 @@ tests/run_debug_ui_oracle.sh
 # Play
 $EIGS_GFX dmg.eigs roms/pokemon-red.gb --gfx --scale 3 --frameskip 2
 
-# Debug (dock chrome: registers + pause/step; needs dock in lib —
-# post-v0.37.0 main). p=pause/run, s=step instr, f=step frame
+# Debug (dock chrome: registers + pause/step; dock is on the pin
+# since v0.38.0). p=pause/run, s=step instr, f=step frame
 $EIGS_GFX dmg.eigs roms/pokemon-red.gb --debug --scale 2
 ```
 
