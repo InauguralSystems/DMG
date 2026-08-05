@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Debugger-chrome UI oracle wrapper (#53): probes for the dock widget
-# (dev-binary only until the post-v0.37.0 cut reaches the pin — the
+# (in the pinned lib since v0.38.0; the probe keeps older runtimes SKIPping — the
 # liferaft probe_timeline pattern), then runs tests/ui_debug_oracle.py
 # under a memory cap (an unbounded gfx run can freeze a small box).
 #
