@@ -182,6 +182,34 @@ MHz on v0.12.0 with deferred bus-tick + inlined exec_op. JIT
 contribution measured on the canary; aggregate suite is too L1i-
 constrained for JIT to dominate (`feedback_proxy_vs_real_bench`).
 
+**Under the AOT, DMG now runs faster than the console it emulates.**
+Measured 2026-08-28 on the dev box (ASUS X540NA), same methodology
+both sides, `cpu_instrs.gb --cycles 1500000`, n=7:
+
+| | speed | vs real hardware |
+|---|---|---|
+| VM | 1.3010 MHz | 31.0% |
+| AOT (`ouroboros/aot/build.sh`) | **5.6977 MHz** | **135.8%** |
+| real DMG hardware | 4.194304 MHz | 100% |
+
+Two things follow, and both matter more than the number:
+
+- **Numbers here are VM numbers unless they say otherwise.** The
+  figures above and in `BASELINE.md` are the interpreter. Say which
+  one, always — a 4.4x gap between the two makes an unlabelled
+  figure worse than none.
+- **The gap was closed upstream, not here.** Nothing in this repo
+  changed. ouroboros#129 stopped the AOT interpreting loaded
+  modules (2,470 of DMG's 3,288 lines, including the whole opcode
+  dispatch, were being run by the linked VM), and ouroboros#130
+  removed the boxing and name lookups: inline caches on dict fields
+  and env names, unboxed comparison against a numeric operand,
+  borrowed field and index access, and a stack argument vector for
+  `dispatch`. Every one is a general EigenScript improvement that
+  is merely *measurable* here because DMG stresses all of them at
+  once. **When DMG is slow, profile the AOT, not the emulator** —
+  `run_headless_loop` was 3.5% of runtime when this started.
+
 ## Gotchas
 
 - `gmon.out`, `massif.out.*`, `jit_stops.log` are profiling
