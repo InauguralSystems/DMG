@@ -3,6 +3,17 @@
 Each GAP-DMG-NNN is a language primitive that landed upstream because the
 emulator demanded it. This is the whole point of DMG.
 
+## Consumer acceptance migrations
+
+- **M1 runtime routing and UI prerequisites (#73, #74).** The debugger
+  wrappers now honor the selected runtime before falling back to a sibling
+  checkout. Missing graphics support is detected by binding `gfx_open`
+  before any window wait; missing dock or host tools also exits nonzero by
+  name. `eigs.json` declares the UI prerequisites for acceptance tooling.
+  Wrapper regression checks exercise both the valid route and rejected
+  prerequisites; the existing engine and pixel/mouse oracles remain the
+  end-to-end checks.
+
 ---
 
 ## GAP-DMG-001: No jump table / dictionary dispatch for opcode decoding

@@ -1,5 +1,13 @@
 {
   "name": "dmg",
   "version": "0.1.0",
-  "deps": {}
+  "deps": {},
+  "acceptance": {
+    "prerequisites": {
+      "runtime": ["gfx", "dock"],
+      "commands": ["timeout", "python3", "xdotool", "xwd", "xwininfo"],
+      "python_modules": ["PIL"],
+      "display": {"any_of": ["DISPLAY", "xvfb-run"]}
+    }
+  }
 }
