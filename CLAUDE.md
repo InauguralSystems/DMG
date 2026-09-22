@@ -187,38 +187,27 @@ that aren't obvious:)
 
 All Blargg suites pass (cpu_instrs aggregate + individual,
 instr_timing, mem_timing). Cycle accuracy holds with the
-intra-instruction stepping. T3200 cpu_instrs canary at ~1.02–1.10
-MHz on v0.12.0 with deferred bus-tick + inlined exec_op. JIT
-contribution measured on the canary; aggregate suite is too L1i-
-constrained for JIT to dominate (`feedback_proxy_vs_real_bench`).
+intra-instruction stepping. JIT contribution is measured on the
+canary; the aggregate suite is too L1i-constrained for the JIT to
+dominate.
 
-**Under the AOT, DMG now runs faster than the console it emulates.**
-Measured 2026-08-28 on the dev box (ASUS X540NA), same methodology
-both sides, `cpu_instrs.gb --cycles 1500000`, n=7:
+Speed is declared and gated in ouroboros, not here: `aot/k_budget.txt`
+(K = host instructions retired per emulated cycle, machine-independent),
+checked by `aot/k_oracle.sh`. Under the AOT, DMG runs faster than the
+console it emulates. Two rules follow:
 
-| | speed | vs real hardware |
-|---|---|---|
-| VM | 1.3010 MHz | 31.0% |
-| AOT (`ouroboros/aot/build.sh`) | **5.6977 MHz** | **135.8%** |
-| real DMG hardware | 4.194304 MHz | 100% |
-
-Two things follow, and both matter more than the number:
-
-- **Numbers here are VM numbers unless they say otherwise.** The
-  figures above and in `BASELINE.md` are the interpreter. Say which
-  one, always — a 4.4x gap between the two makes an unlabelled
-  figure worse than none.
-- **The gap was closed upstream, not here.** Nothing in this repo
-  changed. ouroboros#129 stopped the AOT interpreting loaded
-  modules (2,470 of DMG's 3,288 lines, including the whole opcode
-  dispatch, were being run by the linked VM), and ouroboros#130
-  removed the boxing and name lookups: inline caches on dict fields
-  and env names, unboxed comparison against a numeric operand,
-  borrowed field and index access, and a stack argument vector for
-  `dispatch`. Every one is a general EigenScript improvement that
-  is merely *measurable* here because DMG stresses all of them at
-  once. **When DMG is slow, profile the AOT, not the emulator** —
-  `run_headless_loop` was 3.5% of runtime when this started.
+- **Name the tier on every figure, and prefer K to MHz.** VM and AOT
+  differ by about an order of magnitude, so an unlabelled figure is
+  worse than none; `BASELINE.md` is VM-on-T3200. MHz is per-host and
+  cannot be compared across machines.
+- **When DMG is slow, profile the AOT, not the emulator.** The AOT
+  speedups landed upstream with nothing changed here: ouroboros#129
+  stopped the AOT interpreting loaded modules, and ouroboros#130
+  removed boxing and name lookups (inline caches on dict fields and
+  env names, unboxed numeric comparison, borrowed field/index access,
+  a stack argument vector for `dispatch`). Each is a general
+  EigenScript improvement that DMG merely makes measurable;
+  `run_headless_loop` itself was 3.5% of runtime.
 
 ## Gotchas
 
@@ -250,13 +239,14 @@ silently. Add to that: ask whether the thing you hit is a **law** of the
 language or an **earlier decision**. The tell is writing, or thinking,
 *"X must be true because the runtime does Y."*
 
-Bought 2026-08-28 (ouroboros#127 / DMG). The AOT compiles a program's main
-file but emits `load_file` as a runtime call, so loaded modules are
-interpreted by the linked VM. A real bug in that seam was found, minimised,
+Bought 2026-08-28 (ouroboros#127 / DMG). The AOT then compiled a program's
+main file but emitted `load_file` as a runtime call, so loaded modules were
+interpreted by the linked VM (since fixed, ouroboros#129 — the reasoning is
+the lesson, not the state). A real bug in that seam was found, minimised,
 fixed and verified — and reported as "unlocking the AOT multiplier for
 DMG". Measured on being challenged: DMG is 3,288 lines, 818 compiled and
 2,470 interpreted, including the 128-function opcode dispatch. Every
-emulated instruction runs interpreted, so the fix makes it *run* and cannot
+emulated instruction ran interpreted, so the fix made it *run* and could not
 make it *faster*. A whole investigation cycle had treated that design as
 terrain, and the capability to do it the other way already existed upstream
 for another purpose.
