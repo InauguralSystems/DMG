@@ -1,0 +1,3 @@
+# Bind the builtin without opening a window. A headless runtime advertises
+# gfx in --api, but evaluating this name fails when gfx is not compiled in.
+print of gfx_open

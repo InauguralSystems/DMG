@@ -23,7 +23,7 @@ and Tidepool.
 
 ## Toolchain
 
-EigenScript is **not** vendored. Pin **v0.13.0 minimum**; **v0.41.0**
+EigenScript is **not** vendored. Pin **v0.13.0 minimum**; **v0.43.0**
 is the current tested release (`.devcontainer/Dockerfile` `EIGS_REF`).
 Two binaries matter:
 
@@ -72,8 +72,8 @@ EIGENSCRIPT_GFX=/path/to/eigenscript-gfx tests/run_gfx_smoke.sh
 # Debug-engine equivalence gate (#53) — CI; headless, any pin
 tests/run_debug_equivalence.sh
 
-# Debugger-chrome UI oracle (#53) — render-decode + real-mouse; SKIPs
-# while the pinned lib predates dock, self-arms after the pin bump
+# Debugger-chrome UI oracle (#53) — render-decode + real-mouse;
+# missing prerequisites fail by name with a nonzero exit
 tests/run_debug_ui_oracle.sh
 
 # Play
@@ -86,6 +86,16 @@ $EIGS_GFX dmg.eigs roms/pokemon-red.gb --debug --scale 2
 
 Keys: arrows = D-pad, Z = A, X = B, Return = Start, Backspace =
 Select, Escape = quit.
+
+The debugger wrappers select `EIGENSCRIPT_BIN`, then `EIGENSCRIPT`, `EIGS`,
+`EIGS_DIR/src/eigenscript`, and `eigenscript` on PATH; the sibling checkout
+is the final fallback. The UI wrapper prefers `EIGENSCRIPT_GFX` over that
+sequence. An invalid explicit choice fails instead of selecting another
+runtime. UI prerequisites are declared in `eigs.json` under
+`acceptance.prerequisites`: runtime capabilities, commands, Python imports,
+and the display alternatives. The wrapper checks these before launching the
+oracle and prints `PREREQ MISSING: ...` on failure. `DISPLAY` must identify a
+usable X display, or `xvfb-run` must be available to create one.
 
 ## Layout
 

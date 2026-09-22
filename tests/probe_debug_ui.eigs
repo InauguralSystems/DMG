@@ -1,6 +1,6 @@
 # Probe (#53): does the running binary's lib carry the widgets the
 # debugger chrome needs (dock, #848)? On a pre-#848 pin `dock of` is an
-# undefined variable -> nonzero exit; run_debug_ui_oracle.sh SKIPs then.
+# undefined variable -> nonzero prerequisite failure in the wrapper.
 # Headless-safe: lib/ui.eigs is import-side-effect-free (gfx builtins
 # only error at call time), the liferaft probe_timeline pattern.
 load_file of "lib/ui.eigs"

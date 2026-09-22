@@ -1,42 +1,41 @@
 #!/usr/bin/env bash
-# Debugger-chrome UI oracle wrapper (#53): probes for the dock widget
-# (in the pinned lib since v0.38.0; the probe keeps older runtimes SKIPping — the
-# liferaft probe_timeline pattern), then runs tests/ui_debug_oracle.py
-# under a memory cap (an unbounded gfx run can freeze a small box).
-#
-# Self-arming skip policy: while the pinned lib predates dock the probe
-# SKIPs (exit 0, loud). Once the probe PASSES, everything downstream —
-# X tooling, display, the oracle itself — is REQUIRED and fails loud,
-# so the oracle can never be silently dropped after the pin bump.
+# Debugger-chrome UI oracle wrapper (#53). Validate the selected runtime
+# and declared UI prerequisites before opening a window. A missing
+# prerequisite is a nonzero exit, never an accepted-but-skipped oracle.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-if [[ -n "${EIGENSCRIPT_GFX:-}" ]]; then
-    EIGS="$EIGENSCRIPT_GFX"
-elif [[ -x "$ROOT_DIR/../EigenScript/src/eigenscript" ]]; then
-    EIGS="$ROOT_DIR/../EigenScript/src/eigenscript"
-elif command -v eigenscript >/dev/null 2>&1; then
-    EIGS="$(command -v eigenscript)"
-else
-    echo "SKIP: eigenscript binary not found (set EIGENSCRIPT_GFX)"
-    exit 0
+source "$ROOT_DIR/tests/runtime.sh"
+EIGS="$(dmg_runtime "$ROOT_DIR" "${EIGENSCRIPT_GFX:-${EIGENSCRIPT_BIN:-}}")"
+
+ulimit -v "${DMG_DEBUG_UI_MEM_KB:-1500000}"
+
+if ! command -v timeout >/dev/null 2>&1; then
+    echo "PREREQ MISSING: timeout"
+    exit 1
+fi
+# --api advertises extension names even in a headless build. Bind the
+# actual builtin, without opening a window, to establish gfx support.
+if ! timeout 10 "$EIGS" tests/probe_gfx.eigs >/dev/null 2>&1; then
+    echo "PREREQ MISSING: gfx build (requires gfx_open; set EIGENSCRIPT_GFX)"
+    exit 1
 fi
 
-if ! "$EIGS" tests/probe_debug_ui.eigs >/dev/null 2>&1; then
-    echo "SKIP: dock widget not in this runtime's lib (dev binary only until the next release cut)"
-    exit 0
+if ! timeout 10 "$EIGS" tests/probe_debug_ui.eigs >/dev/null 2>&1; then
+    echo "PREREQ MISSING: dock widget in the selected runtime's lib"
+    exit 1
 fi
 
 for tool in xdotool xwd xwininfo python3; do
     if ! command -v "$tool" >/dev/null 2>&1; then
-        echo "FAIL: probe passed but $tool is not installed — the UI oracle must run."
+        echo "PREREQ MISSING: $tool"
         exit 1
     fi
 done
 if ! python3 -c "import PIL" 2>/dev/null; then
-    echo "FAIL: probe passed but python3-pil is not installed — the UI oracle must run."
+    echo "PREREQ MISSING: python3-pil"
     exit 1
 fi
 
@@ -45,12 +44,18 @@ fi
 RUNNER=()
 if [[ -z "${DISPLAY:-}" ]]; then
     if ! command -v xvfb-run >/dev/null 2>&1; then
-        echo "FAIL: probe passed but there is no DISPLAY and no xvfb-run."
+        echo "PREREQ MISSING: X display (set DISPLAY or install xvfb-run)"
         exit 1
     fi
     RUNNER=(xvfb-run -a -s "-screen 0 1280x800x24")
 fi
 
-ulimit -v "${DMG_DEBUG_UI_MEM_KB:-1500000}"
-
-EIGENSCRIPT="$EIGS" "${RUNNER[@]}" python3 tests/ui_debug_oracle.py
+# Check the display inside the same Xvfb session used by the oracle.
+# A nonempty DISPLAY alone does not prove that an X server is reachable.
+EIGENSCRIPT="$EIGS" "${RUNNER[@]}" "$BASH" -c '
+    if ! timeout 10 xwininfo -root >/dev/null 2>&1; then
+        echo "PREREQ MISSING: usable X display"
+        exit 1
+    fi
+    exec python3 tests/ui_debug_oracle.py
+'

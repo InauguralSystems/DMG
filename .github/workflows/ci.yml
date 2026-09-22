@@ -27,6 +27,7 @@ jobs:
         with:
           runCmd: |
             set -e
+            python3 -B tests/test_debug_wrappers.py
             tests/check_twins.sh
             eigenscript tests/test_cpu.eigs
             eigenscript tests/test_memory.eigs

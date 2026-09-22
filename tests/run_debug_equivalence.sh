@@ -19,16 +19,8 @@ BLARGG_ROM="${DMG_DEBUG_EQ_BLARGG_ROM:-roms/individual/06.gb}"
 BLARGG_CYCLES="${DMG_DEBUG_EQ_BLARGG_CYCLES:-40000000}"
 TIMEOUT_SECONDS="${DMG_DEBUG_EQ_TIMEOUT_SECONDS:-300}"
 
-if [[ -n "${EIGENSCRIPT_BIN:-}" ]]; then
-    EIGS="$EIGENSCRIPT_BIN"
-elif [[ -x "$ROOT_DIR/../EigenScript/src/eigenscript" ]]; then
-    EIGS="$ROOT_DIR/../EigenScript/src/eigenscript"
-elif command -v eigenscript >/dev/null 2>&1; then
-    EIGS="$(command -v eigenscript)"
-else
-    echo "ERROR: eigenscript binary not found (set EIGENSCRIPT_BIN)."
-    exit 1
-fi
+source "$ROOT_DIR/tests/runtime.sh"
+EIGS="$(dmg_runtime "$ROOT_DIR" "${EIGENSCRIPT_BIN:-}")"
 
 if ! command -v timeout >/dev/null 2>&1; then
     echo "ERROR: timeout command not found."
