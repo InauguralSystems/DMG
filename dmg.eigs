@@ -760,7 +760,7 @@ if gfx_mode == 0 and disasm_oracle > 0:
         d is disasm_one of [_disasm_reader, pc0]
         may_int is (mem.ie & mem.if_reg & 0x1F) != 0
         total_cycles += debug_step_instr of [cpu, mem]
-        if d.flow == 1 or may_int == 1:
+        if d.flow == 1 or may_int:
             skipped += 1
             continue
         expect is (pc0 + d.len) & 0xFFFF

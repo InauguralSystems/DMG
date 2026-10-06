@@ -119,11 +119,11 @@ define lcd_enable_write(mem, val) as:
     local was_on is (mem.data[0xFF40] & 0x80) != 0
     mem.data[0xFF40] is val
     local now_on is (val & 0x80) != 0
-    if was_on and now_on == 0:
+    if was_on and not now_on:
         mem.data[0xFF44] is 0
         mem.lcd_counter is 0
         mem.lcd_next is 456
-    elif now_on and was_on == 0:
+    elif now_on and not was_on:
         mem.data[0xFF44] is 0
         mem.lcd_counter is 0
         mem.lcd_next is _lcd_line_start_next of mem
