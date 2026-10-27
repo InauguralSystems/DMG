@@ -94,7 +94,10 @@ if [[ "$STATUS" -ne 0 ]]; then
     exit "$STATUS"
 fi
 
-if grep -q "^Error line " "$LOG_FILE"; then
+# Both runtime-error header formats: `Error line N:` (EigenScript <= v0.47) and
+# `Error <path>:N:` (EigenScript#2004 names the source file). Matching only the
+# old one would let this check go blind, silently, at the pin bump.
+if grep -qE '^Error (line [0-9]+|[^[:space:]]+:[0-9]+): ' "$LOG_FILE"; then
     echo "FAIL: gfx smoke emitted EigenScript runtime errors."
     tail -n 100 "$LOG_FILE"
     exit 1
