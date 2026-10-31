@@ -1,0 +1,16 @@
+{
+  "command": [
+    "timeout",
+    "--signal=TERM",
+    "--kill-after=5",
+    "180",
+    "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot",
+    "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+    "--cycles",
+    "2000000",
+    "--dump-state"
+  ],
+  "arm": "aot",
+  "started_utc": "2026-10-31T17:05:39.767703+00:00",
+  "limit_KiB": 1500000
+}

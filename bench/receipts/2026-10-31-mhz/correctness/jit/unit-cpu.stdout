@@ -1,0 +1,21 @@
+=== DMG CPU tests ===
+  register pairs: ok
+  flags: ok
+  ALU ADD: ok
+  ALU SUB: ok
+  ALU AND/XOR/OR: ok
+  INC/DEC: ok
+  NOP: ok
+  LD B, d8: ok
+  XOR A: ok
+  JP a16: ok
+  CALL/RET: ok
+  PUSH/POP: ok
+  CB SWAP: ok
+  CB BIT: ok
+  STOP/KEY1: ok
+Undefined opcode 0xD3 at PC=0x0100
+  illegal opcode handling: ok
+  fetch8 MBC1 mode-1 bank0 remap: ok
+
+=== All CPU tests passed ===

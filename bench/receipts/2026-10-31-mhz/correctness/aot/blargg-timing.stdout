@@ -1,0 +1,3 @@
+Blargg timing suite: cycles=50000000 timeout=180s max_rss=65536KB
+FAIL: instr_timing timed out after 180s.
+ROM loaded: INSTR_TIMING (32768 bytes, MBC1)

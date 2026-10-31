@@ -1,0 +1,3 @@
+Blargg CPU instruction suite: mode=all aggregate_cycles=260000000 aggregate_timeout=1500s individual_cycles=120000000 individual_timeout=700s max_rss=65536KB
+FAIL: cpu_instrs timed out after 1500s.
+ROM loaded: CPU_INSTRS (65536 bytes, MBC1)

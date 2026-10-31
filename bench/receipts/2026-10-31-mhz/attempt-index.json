@@ -1,0 +1,1264 @@
+[
+  {
+    "evidence": "aot-oracle/attempt.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "12000",
+      "bash",
+      "/home/jon/src/wt/dmg-89/.bench-build/ouroboros/aot/k_oracle.sh"
+    ],
+    "exit_status": 2
+  },
+  {
+    "evidence": "build/native-cpu.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "1800",
+      "bash",
+      "/home/jon/src/wt/dmg-89/.bench-build/ouroboros/aot/build.sh",
+      "/home/jon/src/wt/dmg-89/tests/test_cpu.eigs",
+      "/home/jon/src/wt/dmg-89/.bench-build/test_cpu-aot"
+    ],
+    "exit_status": 1
+  },
+  {
+    "evidence": "build/native-dmg.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "1800",
+      "bash",
+      "/home/jon/src/wt/dmg-89/.bench-build/ouroboros/aot/build.sh",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "build/native-memory.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "1800",
+      "bash",
+      "/home/jon/src/wt/dmg-89/.bench-build/ouroboros/aot/build.sh",
+      "/home/jon/src/wt/dmg-89/tests/test_memory.eigs",
+      "/home/jon/src/wt/dmg-89/.bench-build/test_memory-aot"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "build/runtime.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "1800",
+      "make",
+      "-C",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg",
+      "CC=gcc"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/aot/blargg-cpu_instrs.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "12000",
+      "bash",
+      "/home/jon/src/wt/dmg-89/tests/run_blargg_cpu_instrs_suite.sh"
+    ],
+    "exit_status": 1
+  },
+  {
+    "evidence": "correctness/aot/blargg-timing.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "12000",
+      "bash",
+      "/home/jon/src/wt/dmg-89/tests/run_blargg_timing_suite.sh"
+    ],
+    "exit_status": 1
+  },
+  {
+    "evidence": "correctness/aot/children/cpu_instrs.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "260000000"
+    ],
+    "exit_status": -15
+  },
+  {
+    "evidence": "correctness/aot/children/instr_timing.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot",
+      "/home/jon/src/wt/dmg-89/roms/instr_timing.gb",
+      "--cycles",
+      "50000000"
+    ],
+    "exit_status": -15
+  },
+  {
+    "evidence": "correctness/aot/unit-memory.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/test_memory-aot"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/blargg-cpu_instrs.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "12000",
+      "bash",
+      "/home/jon/src/wt/dmg-89/tests/run_blargg_cpu_instrs_suite.sh"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/blargg-timing.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "12000",
+      "bash",
+      "/home/jon/src/wt/dmg-89/tests/run_blargg_timing_suite.sh"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/cpu_instrs.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "260000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/individual-01.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/01.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/individual-02.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/02.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/individual-03.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/03.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/individual-04.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/04.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/individual-05.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/05.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/individual-06.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/06.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/individual-07.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/07.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/individual-08.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/08.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/individual-09.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/09.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/individual-10.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/10.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/individual-11.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/11.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/instr_timing.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/instr_timing.gb",
+      "--cycles",
+      "50000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/interrupt_time-interrupt_time.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/interrupt_time/interrupt_time.gb",
+      "--cycles",
+      "50000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/mem_timing-2-mem_timing.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/mem_timing-2/mem_timing.gb",
+      "--cycles",
+      "50000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/children/mem_timing.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/mem_timing.gb",
+      "--cycles",
+      "50000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/jit-diagnostic.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/unit-cpu.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/tests/test_cpu.eigs"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/interpreter/unit-memory.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/tests/test_memory.eigs"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/blargg-cpu_instrs.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "12000",
+      "bash",
+      "/home/jon/src/wt/dmg-89/tests/run_blargg_cpu_instrs_suite.sh"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/blargg-timing.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "12000",
+      "bash",
+      "/home/jon/src/wt/dmg-89/tests/run_blargg_timing_suite.sh"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/cpu_instrs.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "260000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/individual-01.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/01.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/individual-02.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/02.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/individual-03.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/03.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/individual-04.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/04.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/individual-05.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/05.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/individual-06.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/06.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/individual-07.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/07.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/individual-08.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/08.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/individual-09.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/09.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/individual-10.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/10.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/individual-11.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/individual/11.gb",
+      "--cycles",
+      "120000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/instr_timing.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/instr_timing.gb",
+      "--cycles",
+      "50000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/interrupt_time-interrupt_time.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/interrupt_time/interrupt_time.gb",
+      "--cycles",
+      "50000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/mem_timing-2-mem_timing.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/mem_timing-2/mem_timing.gb",
+      "--cycles",
+      "50000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/children/mem_timing.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/mem_timing.gb",
+      "--cycles",
+      "50000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/jit-diagnostic.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/unit-cpu.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/tests/test_cpu.eigs"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/jit/unit-memory.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/tests/test_memory.eigs"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/aot-0.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "0"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/aot-2000000-dump.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "2000000",
+      "--dump-state"
+    ],
+    "exit_status": 124
+  },
+  {
+    "evidence": "correctness/parity/aot-2000000.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "2000000"
+    ],
+    "exit_status": 124
+  },
+  {
+    "evidence": "correctness/parity/aot-500000-dump.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000",
+      "--dump-state"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/aot-500000.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/interpreter-0.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "0"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/interpreter-2000000-dump.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "2000000",
+      "--dump-state"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/interpreter-2000000.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "2000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/interpreter-500000-dump.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000",
+      "--dump-state"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/interpreter-500000.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/jit-0.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "0"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/jit-2000000-dump.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "2000000",
+      "--dump-state"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/jit-2000000.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "2000000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/jit-500000-dump.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000",
+      "--dump-state"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "correctness/parity/jit-500000.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/01-interpreter.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/01-jit-repeat.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/01-jit.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/02-interpreter.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/02-jit-repeat.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/02-jit.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/03-interpreter.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/03-jit-repeat.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/03-jit.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/04-interpreter.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/04-jit-repeat.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/04-jit.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/05-interpreter.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/05-jit-repeat.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/05-jit.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/06-interpreter.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/06-jit-repeat.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/06-jit.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/07-interpreter.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/07-jit-repeat.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "samples/07-jit.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "warmup/interpreter.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  },
+  {
+    "evidence": "warmup/jit.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+      "/home/jon/src/wt/dmg-89/dmg.eigs",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "500000"
+    ],
+    "exit_status": 0
+  }
+]

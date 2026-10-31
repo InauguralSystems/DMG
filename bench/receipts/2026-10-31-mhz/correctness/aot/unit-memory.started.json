@@ -1,0 +1,12 @@
+{
+  "command": [
+    "timeout",
+    "--signal=TERM",
+    "--kill-after=5",
+    "180",
+    "/home/jon/src/wt/dmg-89/.bench-build/test_memory-aot"
+  ],
+  "arm": "aot",
+  "started_utc": "2026-10-31T16:28:40.029572+00:00",
+  "limit_KiB": 1500000
+}

@@ -1,0 +1,17 @@
+{
+  "command": [
+    "timeout",
+    "--signal=TERM",
+    "--kill-after=5",
+    "180",
+    "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+    "/home/jon/src/wt/dmg-89/dmg.eigs",
+    "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+    "--cycles",
+    "500000",
+    "--dump-state"
+  ],
+  "arm": "interpreter",
+  "started_utc": "2026-10-31T17:02:57.778730+00:00",
+  "limit_KiB": 1500000
+}

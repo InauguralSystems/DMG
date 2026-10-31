@@ -1,0 +1,42 @@
+{
+  "comparisons": [
+    {
+      "requested_cycles": 0,
+      "dump_state": false,
+      "byte_exact_status_stdout_stderr": true,
+      "vm_jit_ok": true,
+      "vm_aot_ok": true
+    },
+    {
+      "requested_cycles": 500000,
+      "dump_state": false,
+      "byte_exact_status_stdout_stderr": true,
+      "vm_jit_ok": true,
+      "vm_aot_ok": true
+    },
+    {
+      "requested_cycles": 2000000,
+      "dump_state": false,
+      "byte_exact_status_stdout_stderr": false,
+      "vm_jit_ok": true,
+      "vm_aot_ok": false
+    },
+    {
+      "requested_cycles": 500000,
+      "dump_state": true,
+      "byte_exact_status_stdout_stderr": true,
+      "vm_jit_ok": true,
+      "vm_aot_ok": true
+    },
+    {
+      "requested_cycles": 2000000,
+      "dump_state": true,
+      "byte_exact_status_stdout_stderr": false,
+      "vm_jit_ok": true,
+      "vm_aot_ok": false
+    }
+  ],
+  "all_ok": false,
+  "vm_jit_ok": true,
+  "vm_aot_ok": false
+}

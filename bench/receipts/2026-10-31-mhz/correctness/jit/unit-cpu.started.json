@@ -1,0 +1,13 @@
+{
+  "command": [
+    "timeout",
+    "--signal=TERM",
+    "--kill-after=5",
+    "180",
+    "/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript",
+    "/home/jon/src/wt/dmg-89/tests/test_cpu.eigs"
+  ],
+  "arm": "jit",
+  "started_utc": "2026-10-31T16:18:08.489085+00:00",
+  "limit_KiB": 1500000
+}
