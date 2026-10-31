@@ -1,0 +1,21 @@
+ROM loaded: MEM_TIMING (65536 bytes, MBC1)
+
+mem_timing
+
+01:ok  02:ok  03:ok  
+
+Passed all tests
+
+
+Loop exited: cycles=7000004 halted=0 stopped=0 PC=531
+IE=0 IF=13 IME=0 LY=17
+
+Cycles: 7000004
+Time: 7061.931017011404ms
+Speed: 0.9912308663363847 MHz (GB is 4.19 MHz)
+Serial output: mem_timing
+
+01:ok  02:ok  03:ok  
+
+Passed all tests
+

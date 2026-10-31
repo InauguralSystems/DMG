@@ -1,0 +1,109 @@
+[
+  {
+    "evidence": "aot-oracle/attempt.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "12000",
+      "bash",
+      "/home/jon/src/wt/dmg-89/.bench-build/ouroboros/aot/k_oracle.sh"
+    ],
+    "exit_status": 2
+  },
+  {
+    "evidence": "build/native-cpu.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "1800",
+      "bash",
+      "/home/jon/src/wt/dmg-89/.bench-build/ouroboros/aot/build.sh",
+      "/home/jon/src/wt/dmg-89/tests/test_cpu.eigs",
+      "/home/jon/src/wt/dmg-89/.bench-build/test_cpu-aot"
+    ],
+    "exit_status": 1
+  },
+  {
+    "evidence": "correctness/aot/blargg-cpu_instrs.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "12000",
+      "bash",
+      "/home/jon/src/wt/dmg-89/tests/run_blargg_cpu_instrs_suite.sh"
+    ],
+    "exit_status": 1
+  },
+  {
+    "evidence": "correctness/aot/blargg-timing.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "12000",
+      "bash",
+      "/home/jon/src/wt/dmg-89/tests/run_blargg_timing_suite.sh"
+    ],
+    "exit_status": 1
+  },
+  {
+    "evidence": "correctness/aot/children/cpu_instrs.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "260000000"
+    ],
+    "exit_status": -15
+  },
+  {
+    "evidence": "correctness/aot/children/instr_timing.json",
+    "role": "ROM child",
+    "command": [
+      "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot",
+      "/home/jon/src/wt/dmg-89/roms/instr_timing.gb",
+      "--cycles",
+      "50000000"
+    ],
+    "exit_status": -15
+  },
+  {
+    "evidence": "correctness/parity/aot-2000000-dump.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "2000000",
+      "--dump-state"
+    ],
+    "exit_status": 124
+  },
+  {
+    "evidence": "correctness/parity/aot-2000000.json",
+    "role": "recorded command",
+    "command": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=5",
+      "180",
+      "/home/jon/src/wt/dmg-89/.bench-build/dmg-aot",
+      "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb",
+      "--cycles",
+      "2000000"
+    ],
+    "exit_status": 124
+  }
+]

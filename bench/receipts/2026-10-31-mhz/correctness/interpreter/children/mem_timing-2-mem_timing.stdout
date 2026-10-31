@@ -1,0 +1,16 @@
+ROM loaded: MEM_TIMING (65536 bytes, MBC1)
+
+mem_timing
+
+01:ok  02:ok  03:ok  
+
+Passed
+
+Blargg RAM result: 0
+
+Loop exited: cycles=12000000 halted=0 stopped=0 PC=11229
+IE=0 IF=5 IME=0 LY=48
+
+Cycles: 12000000
+Time: 12410.785197973251ms
+Speed: 0.9669009501477526 MHz (GB is 4.19 MHz)

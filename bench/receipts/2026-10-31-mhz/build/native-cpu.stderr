@@ -1,0 +1,6 @@
+AOT: function '_op_cb' assigns module name 'cycles' whose first module-level binding does not provably precede the function's first use. The VM's outward-write rule is checked at RUNTIME (a missing outer binding makes the write a function-local that dies with the call); this order cannot be answered statically, so it is refused (see the outward-write arm).
+  11305 |                 throw of ("AOT: function '" + name + "' assigns module name '" + v + "' whose first module-level binding does not provably precede the function's first use. The VM's outward-write rule
+       |                       ^
+  at emit_function (compile.eigs:11305)
+  at emit_program (compile.eigs:13954)
+  at <module> (compile.eigs:15581)

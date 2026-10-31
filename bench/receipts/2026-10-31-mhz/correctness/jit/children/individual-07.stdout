@@ -1,0 +1,19 @@
+ROM loaded:  (32768 bytes, MBC1)
+
+07-jr,jp,call,ret,rst
+
+
+Passed
+
+
+Loop exited: cycles=3000000 halted=0 stopped=0 PC=50995
+IE=0 IF=9 IME=0 LY=23
+
+Cycles: 3000000
+Time: 3802.1406390070915ms
+Speed: 0.7890292035024339 MHz (GB is 4.19 MHz)
+Serial output: 07-jr,jp,call,ret,rst
+
+
+Passed
+
