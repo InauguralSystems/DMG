@@ -1,0 +1,17 @@
+Blargg CPU instruction suite: mode=all aggregate_cycles=260000000 aggregate_timeout=1500s individual_cycles=120000000 individual_timeout=700s max_rss=65536KB
+ok: rom=cpu_instrs budget=260000000 cycles=225000008 rss_kb=12288
+ok: rom=individual_01 budget=120000000 cycles=10000008 rss_kb=12288
+ok: rom=individual_02 budget=120000000 cycles=2000004 rss_kb=12288
+ok: rom=individual_03 budget=120000000 cycles=10000004 rss_kb=12288
+ok: rom=individual_04 budget=120000000 cycles=12000004 rss_kb=12288
+ok: rom=individual_05 budget=120000000 cycles=16000008 rss_kb=12160
+ok: rom=individual_06 budget=120000000 cycles=3000008 rss_kb=12416
+ok: rom=individual_07 budget=120000000 cycles=3000000 rss_kb=12288
+ok: rom=individual_08 budget=120000000 cycles=3000008 rss_kb=12160
+ok: rom=individual_09 budget=120000000 cycles=39000008 rss_kb=12160
+ok: rom=individual_10 budget=120000000 cycles=59000000 rss_kb=12416
+ok: rom=individual_11 budget=120000000 cycles=74000008 rss_kb=12288
+PASS: Blargg CPU instruction suite
+Mode:         all
+Total cycles: 456000068
+Peak RSS:     12416 KB

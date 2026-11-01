@@ -1,0 +1,19 @@
+ROM loaded:  (32768 bytes, MBC1)
+
+interrupt time
+
+00 00 00 
+00 08 0D 
+01 00 00 
+01 08 0D 
+
+Passed
+
+Blargg RAM result: 0
+
+Loop exited: cycles=3000008 halted=0 stopped=0 PC=51657
+IE=8 IF=5 IME=0 LY=116
+
+Cycles: 3000008
+Time: 3765.3508049845695ms
+Speed: 0.796740637294297 MHz (GB is 4.19 MHz)

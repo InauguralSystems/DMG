@@ -1,0 +1,19 @@
+ROM loaded:  (32768 bytes, MBC1)
+
+05-op rp
+
+
+Passed
+
+
+Loop exited: cycles=16000008 halted=0 stopped=0 PC=52017
+IE=0 IF=9 IME=0 LY=42
+
+Cycles: 16000008
+Time: 23543.167616009712ms
+Speed: 0.6796030279765647 MHz (GB is 4.19 MHz)
+Serial output: 05-op rp
+
+
+Passed
+

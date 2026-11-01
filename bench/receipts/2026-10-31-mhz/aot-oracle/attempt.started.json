@@ -1,0 +1,13 @@
+{
+  "command": [
+    "timeout",
+    "--signal=TERM",
+    "--kill-after=5",
+    "12000",
+    "bash",
+    "/home/jon/src/wt/dmg-89/.bench-build/ouroboros/aot/k_oracle.sh"
+  ],
+  "arm": "jit",
+  "started_utc": "2026-10-31T16:08:32.193711+00:00",
+  "limit_KiB": 1500000
+}

@@ -1,0 +1,11 @@
+=== DMG memory tests ===
+  MBC1 ROM banking: ok
+  MBC1 RAM banking: ok
+  MBC3 RAM banking: ok
+  MBC5 banking: ok
+  Echo RAM and DMA: ok
+  LCDC off LY reset: ok
+  serial completion: ok
+  null joypad read: ok
+
+=== All memory tests passed ===

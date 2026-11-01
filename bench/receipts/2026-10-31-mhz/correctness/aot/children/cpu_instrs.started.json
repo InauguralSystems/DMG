@@ -1,0 +1,1 @@
+{"command": ["/home/jon/src/wt/dmg-89/.bench-build/dmg-aot", "/home/jon/src/wt/dmg-89/roms/cpu_instrs.gb", "--cycles", "260000000"], "arm": "aot", "limit_KiB": 1500000, "started_unix_ns": 1793464120230372384}

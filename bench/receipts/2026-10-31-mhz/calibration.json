@@ -1,0 +1,91 @@
+[
+  {
+    "case": "negative-control",
+    "expected_valid": true,
+    "valid": true,
+    "reasons": []
+  },
+  {
+    "case": "changed-PC",
+    "expected_valid": false,
+    "valid": false,
+    "reasons": [
+      "normalized stdout mismatch"
+    ]
+  },
+  {
+    "case": "missing-cycles",
+    "expected_valid": false,
+    "valid": false,
+    "reasons": [
+      "normalized stdout mismatch",
+      "expected one cycle report, got 0"
+    ]
+  },
+  {
+    "case": "duplicate-cycles",
+    "expected_valid": false,
+    "valid": false,
+    "reasons": [
+      "normalized stdout mismatch",
+      "expected one cycle report, got 2"
+    ]
+  },
+  {
+    "case": "short-cycles",
+    "expected_valid": false,
+    "valid": false,
+    "reasons": [
+      "normalized stdout mismatch",
+      "unexpected/short cycle count"
+    ]
+  },
+  {
+    "case": "timeout",
+    "expected_valid": false,
+    "valid": false,
+    "reasons": [
+      "timeout"
+    ]
+  },
+  {
+    "case": "nonzero",
+    "expected_valid": false,
+    "valid": false,
+    "reasons": [
+      "nonzero exit"
+    ]
+  },
+  {
+    "case": "stderr",
+    "expected_valid": false,
+    "valid": false,
+    "reasons": [
+      "stderr mismatch"
+    ]
+  },
+  {
+    "case": "thermal",
+    "expected_valid": false,
+    "valid": false,
+    "reasons": [
+      "temperature >=70 C"
+    ]
+  },
+  {
+    "case": "contamination",
+    "expected_valid": false,
+    "valid": false,
+    "reasons": [
+      "excess host busy CPU >0.50 CPU-equivalents"
+    ]
+  },
+  {
+    "case": "source-hash-mutant",
+    "caught": true
+  },
+  {
+    "case": "interrupted-attempt-no-overwrite",
+    "caught": true
+  }
+]

@@ -1,0 +1,19 @@
+ROM loaded: INSTR_TIMING (32768 bytes, MBC1)
+
+instr_timing
+
+
+Passed
+
+
+Loop exited: cycles=3000008 halted=0 stopped=0 PC=51376
+IE=0 IF=13 IME=0 LY=23
+
+Cycles: 3000008
+Time: 3692.909458011389ms
+Speed: 0.8123697680948527 MHz (GB is 4.19 MHz)
+Serial output: instr_timing
+
+
+Passed
+

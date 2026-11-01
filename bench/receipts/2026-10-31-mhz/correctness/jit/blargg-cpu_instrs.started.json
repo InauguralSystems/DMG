@@ -1,0 +1,13 @@
+{
+  "command": [
+    "timeout",
+    "--signal=TERM",
+    "--kill-after=5",
+    "12000",
+    "bash",
+    "/home/jon/src/wt/dmg-89/tests/run_blargg_cpu_instrs_suite.sh"
+  ],
+  "arm": "jit",
+  "started_utc": "2026-10-31T16:18:08.602776+00:00",
+  "limit_KiB": 1500000
+}

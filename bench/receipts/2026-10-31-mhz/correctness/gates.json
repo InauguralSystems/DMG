@@ -1,0 +1,65 @@
+{
+  "interpreter": {
+    "gates_ok": true,
+    "results": [
+      {
+        "name": "correctness/interpreter/unit-cpu",
+        "exit_status": 0
+      },
+      {
+        "name": "correctness/interpreter/unit-memory",
+        "exit_status": 0
+      },
+      {
+        "name": "correctness/interpreter/blargg-cpu_instrs",
+        "exit_status": 0
+      },
+      {
+        "name": "correctness/interpreter/blargg-timing",
+        "exit_status": 0
+      }
+    ]
+  },
+  "jit": {
+    "gates_ok": true,
+    "results": [
+      {
+        "name": "correctness/jit/unit-cpu",
+        "exit_status": 0
+      },
+      {
+        "name": "correctness/jit/unit-memory",
+        "exit_status": 0
+      },
+      {
+        "name": "correctness/jit/blargg-cpu_instrs",
+        "exit_status": 0
+      },
+      {
+        "name": "correctness/jit/blargg-timing",
+        "exit_status": 0
+      }
+    ]
+  },
+  "aot": {
+    "gates_ok": false,
+    "results": [
+      {
+        "name": null,
+        "exit_status": null
+      },
+      {
+        "name": "correctness/aot/unit-memory",
+        "exit_status": 0
+      },
+      {
+        "name": "correctness/aot/blargg-cpu_instrs",
+        "exit_status": 1
+      },
+      {
+        "name": "correctness/aot/blargg-timing",
+        "exit_status": 1
+      }
+    ]
+  }
+}

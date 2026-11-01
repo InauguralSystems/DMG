@@ -1,0 +1,8 @@
+Blargg timing suite: cycles=50000000 timeout=180s max_rss=65536KB
+ok: rom=instr_timing cycles=3000008 rss_kb=12288
+ok: rom=mem_timing cycles=7000004 rss_kb=12416
+ok: rom=mem_timing_2 cycles=12000000 rss_kb=12288
+ok: rom=interrupt_time cycles=3000008 rss_kb=12288
+PASS: Blargg timing suite
+ROMs:     instr_timing mem_timing mem_timing_2 interrupt_time
+Peak RSS: 12416 KB

@@ -1,0 +1,9 @@
+{
+  "utc": "2026-10-31T16:31:30.486354+00:00",
+  "note": "Additional read-only observations before any performance samples; no host settings changed.",
+  "values": {
+    "/sys/devices/system/cpu/intel_pstate/no_turbo": "0\n",
+    "/proc/sys/kernel/randomize_va_space": "2\n",
+    "/sys/class/power_supply/ADP0/online": "unavailable"
+  }
+}

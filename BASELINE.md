@@ -1,6 +1,50 @@
 # DMG baseline
 
-Machine: T3200 (2008 Gateway laptop, ~2007-era CPU). Use as local
+## Fresh wall receipt — 2026-10-31, ASUS X540NA
+
+These are headless **VM-tier, startup-inclusive external wall** results on the
+bare-metal Celeron N3350 dev box (two cores, 4 GB), using the standard
+`cpu_instrs.gb --cycles 500000` canary. All samples reported **500,004 actual
+cycles**. The dated [auditable receipt](bench/receipts/2026-10-31-mhz/RECEIPT.md)
+contains the frozen manifest, exact commands, all raw samples/failures,
+correctness evidence, host conditions, IQRs and paired comparisons.
+
+Frozen sources: DMG `3451eeba1ae1a14ee8e08d90721f09458a585197`;
+both DMG and ouroboros declare EigenScript **v0.48.0**, resolved to
+`546848c0a7123ea7066923ebadb06f0af29af953`;
+ouroboros `4afbfdde8b070f9aa196e37a8fb0229c50ee586b` (remote main at inspection).
+Builds used worktree-local directories and the unchanged release/AOT defaults.
+
+| Execution tier / role | Valid n | Median external wall | Median wall MHz | MHz range |
+|---|---:|---:|---:|---|
+| VM interpreter (`EIGS_JIT_OFF=1`) | 7 | 0.542594 s | **0.922** | 0.860–0.963 |
+| VM default JIT | 7 | 0.564606 s | **0.886** | 0.856–0.919 |
+| VM identical-JIT A/A control | 7 | 0.566054 s | **0.883** | 0.858–0.948 |
+| AOT, requested startup-subtracted 0/2M protocol | 0 | — | **blocked** | — |
+
+Seven counterbalanced rounds retained every sample, with no exclusions or
+timed failures. Interpreter and default JIT passed the unit and Blargg CPU /
+timing gates and all declared byte-exact parity checks before timing. The
+paired JIT/interpreter wall delta was +4.057%; unchanged-binary A/A wall-delta
+IQR was 5.161 percentage points, so a small tier effect is unresolved beyond
+the measured noise. Residual host activity and observation limits are in the
+receipt; these figures do not establish a historical regression or speedup.
+
+**AOT is incomplete.** Its CPU unit-test compilation was refused (the binding
+order class tracked by [ouroboros#335](https://github.com/InauguralSystems/ouroboros/issues/335));
+native CPU/timing gates and 2M parity probes timed out, and `k_oracle.sh`
+refused perf access (`perf_event_paranoid=4`). The receipt preserves every
+failure; no AOT MHz or K is published. This complements
+[ouroboros#333](https://github.com/InauguralSystems/ouroboros/issues/333)
+without changing its budget or treating the instruction-cost regression as
+resolved. Historical AOT numbers remain historical context.
+
+The sections below retain their original dates, pins, hosts and timing
+methodologies. They are **historical receipts**, not v0.48.0 results. In
+particular, the historical 5M VM/JIT and 2M AOT receipts cited by DMG#89 are not
+replaced by this 500K VM canary, and unmatched rows do not support speedup claims.
+
+Historical machine: T3200 (2008 Gateway laptop, ~2007-era CPU). Use as local
 trend numbers, not universal performance claims. Modern HW will be
 substantially faster — most prior CHANGELOG/memory perf figures
 (e.g. 5 MHz cpu_instrs, 116 ms bench_dmg_shape) were modern HW.

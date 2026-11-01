@@ -1,0 +1,13 @@
+{
+  "command": [
+    "timeout",
+    "--signal=TERM",
+    "--kill-after=5",
+    "12000",
+    "bash",
+    "/home/jon/src/wt/dmg-89/tests/run_blargg_timing_suite.sh"
+  ],
+  "arm": "interpreter",
+  "started_utc": "2026-10-31T16:17:40.408437+00:00",
+  "limit_KiB": 1500000
+}

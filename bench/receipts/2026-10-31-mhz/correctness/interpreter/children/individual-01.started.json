@@ -1,0 +1,1 @@
+{"command": ["/home/jon/src/wt/dmg-89/.bench-build/eigs-dmg/build/release/eigenscript", "/home/jon/src/wt/dmg-89/dmg.eigs", "/home/jon/src/wt/dmg-89/roms/individual/01.gb", "--cycles", "120000000"], "arm": "interpreter", "limit_KiB": 1500000, "started_unix_ns": 1793463177818353807}

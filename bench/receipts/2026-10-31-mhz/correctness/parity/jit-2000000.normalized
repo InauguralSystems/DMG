@@ -1,0 +1,9 @@
+ROM loaded: CPU_INSTRS (65536 bytes, MBC1)
+
+Loop exited: cycles=2000008 halted=0 stopped=0 PC=49155
+IE=0 IF=1 IME=0 LY=140
+
+Cycles: 2000008
+Serial output: cpu_instrs
+
+01
