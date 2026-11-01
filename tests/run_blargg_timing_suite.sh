@@ -3,21 +3,23 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# --list prints the labels this invocation would run (after ONLY) and exits;
+# tests/run_blargg_ci.sh uses it so a ROM added here cannot go unexercised in
+# CI without an entry in tests/blargg_ci_skip.txt.
+LIST_ONLY=0
+case "${1:-}" in
+    "") ;;
+    --list) LIST_ONLY=1 ;;
+    *) echo "ERROR: unknown argument: $1 (only --list is accepted)"; exit 1 ;;
+esac
+
+# BLARGG_TIMING_ONLY=<label> runs just that ROM (CI runs the ROMs in
+# parallel, one invocation each). An unknown label is an error.
+ONLY="${BLARGG_TIMING_ONLY:-}"
+
 CYCLES="${BLARGG_TIMING_CYCLES:-50000000}"
 TIMEOUT_SECONDS="${BLARGG_TIMING_TIMEOUT_SECONDS:-180}"
 MAX_RSS_KB="${BLARGG_TIMING_MAX_RSS_KB:-65536}"
-
-if [[ -n "${EIGENSCRIPT:-}" ]]; then
-    EIGENSCRIPT_BIN="$EIGENSCRIPT"
-elif [[ -x "$ROOT_DIR/../EigenScript/src/eigenscript" ]]; then
-    EIGENSCRIPT_BIN="$ROOT_DIR/../EigenScript/src/eigenscript"
-elif command -v eigenscript >/dev/null 2>&1; then
-    EIGENSCRIPT_BIN="$(command -v eigenscript)"
-else
-    echo "ERROR: eigenscript binary not found."
-    echo "Set EIGENSCRIPT=/path/to/eigenscript."
-    exit 1
-fi
 
 if ! [[ "$CYCLES" =~ ^[0-9]+$ && "$CYCLES" -gt 0 ]]; then
     echo "ERROR: BLARGG_TIMING_CYCLES must be a positive integer."
@@ -31,16 +33,6 @@ fi
 
 if ! [[ "$MAX_RSS_KB" =~ ^[0-9]+$ && "$MAX_RSS_KB" -gt 0 ]]; then
     echo "ERROR: BLARGG_TIMING_MAX_RSS_KB must be a positive integer."
-    exit 1
-fi
-
-if ! command -v timeout >/dev/null 2>&1; then
-    echo "ERROR: timeout command not found; refusing to run an uncapped timing suite."
-    exit 1
-fi
-
-if ! command -v /usr/bin/time >/dev/null 2>&1; then
-    echo "ERROR: /usr/bin/time not found; RSS guard requires GNU time."
     exit 1
 fi
 
@@ -58,17 +50,72 @@ ROMS=(
     "$ROOT_DIR/roms/interrupt_time/interrupt_time.gb"
 )
 
+selected() {
+    [[ -z "$ONLY" || "$1" == "$ONLY" ]]
+}
+
+if [[ -n "$ONLY" ]]; then
+    known=0
+    for label in "${LABELS[@]}"; do
+        if [[ "$label" == "$ONLY" ]]; then
+            known=1
+        fi
+    done
+    if [[ "$known" -ne 1 ]]; then
+        echo "ERROR: BLARGG_TIMING_ONLY=$ONLY is not a known label (${LABELS[*]})."
+        exit 1
+    fi
+fi
+
+if [[ "$LIST_ONLY" -eq 1 ]]; then
+    for label in "${LABELS[@]}"; do
+        if selected "$label"; then
+            echo "$label"
+        fi
+    done
+    exit 0
+fi
+
+# The runtime is resolved only when ROMs will run, so --list works without it.
+if [[ -n "${EIGENSCRIPT:-}" ]]; then
+    EIGENSCRIPT_BIN="$EIGENSCRIPT"
+elif [[ -x "$ROOT_DIR/../EigenScript/src/eigenscript" ]]; then
+    EIGENSCRIPT_BIN="$ROOT_DIR/../EigenScript/src/eigenscript"
+elif command -v eigenscript >/dev/null 2>&1; then
+    EIGENSCRIPT_BIN="$(command -v eigenscript)"
+else
+    echo "ERROR: eigenscript binary not found."
+    echo "Set EIGENSCRIPT=/path/to/eigenscript."
+    exit 1
+fi
+
+if ! command -v timeout >/dev/null 2>&1; then
+    echo "ERROR: timeout command not found; refusing to run an uncapped timing suite."
+    exit 1
+fi
+
+if ! command -v /usr/bin/time >/dev/null 2>&1; then
+    echo "ERROR: /usr/bin/time not found; RSS guard requires GNU time."
+    exit 1
+fi
+
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 MAX_SEEN_RSS_KB=0
+RAN=0
+RAN_LABELS=()
 
-echo "Blargg timing suite: cycles=$CYCLES timeout=${TIMEOUT_SECONDS}s max_rss=${MAX_RSS_KB}KB"
+echo "Blargg timing suite: only=${ONLY:-<all>} cycles=$CYCLES timeout=${TIMEOUT_SECONDS}s max_rss=${MAX_RSS_KB}KB"
 
 for i in "${!LABELS[@]}"; do
     LABEL="${LABELS[$i]}"
     ROM_PATH="${ROMS[$i]}"
     LOG_FILE="$TMP_DIR/${LABEL}.log"
+
+    if ! selected "$LABEL"; then
+        continue
+    fi
 
     if [[ ! -f "$ROM_PATH" ]]; then
         echo "FAIL: missing ROM for ${LABEL}: $ROM_PATH"
@@ -134,9 +181,17 @@ for i in "${!LABELS[@]}"; do
         MAX_SEEN_RSS_KB="$RSS_KB"
     fi
 
+    RAN=$((RAN + 1))
+    RAN_LABELS+=("$LABEL")
     printf 'ok: rom=%s cycles=%s rss_kb=%s\n' "$LABEL" "$REPORTED_CYCLES" "$RSS_KB"
 done
 
+# A selection that ran nothing is a failure, not a pass.
+if [[ "$RAN" -eq 0 ]]; then
+    echo "FAIL: no ROM selected (only=${ONLY:-<all>})."
+    exit 1
+fi
+
 echo "PASS: Blargg timing suite"
-echo "ROMs:     ${LABELS[*]}"
+echo "ROMs:     ${RAN_LABELS[*]}"
 echo "Peak RSS: ${MAX_SEEN_RSS_KB} KB"

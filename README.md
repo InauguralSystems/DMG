@@ -17,7 +17,9 @@ MBC1/MBC3/MBC5 ROM and cartridge RAM banking, timer/LCD/VBlank timing, interrupt
 joypad input, and PPU rendering (background, window, sprites with priority).
 
 All Blargg suites pass: `cpu_instrs` (aggregate + individual),
-`instr_timing`, and `mem_timing`.
+`instr_timing`, and `mem_timing`. CI runs the 11 individual `cpu_instrs`
+ROMs and the timing ROMs on every push and pull request
+(`tests/run_blargg_ci.sh`); the aggregate ROM is run locally.
 
 Runs in two modes:
 - **Headless**: Blargg test ROMs via serial port capture

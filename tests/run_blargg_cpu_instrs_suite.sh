@@ -3,24 +3,26 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# --list prints the labels this invocation would run (after MODE/ONLY) and
+# exits; tests/run_blargg_ci.sh uses it so a ROM added here cannot go
+# unexercised in CI without an entry in tests/blargg_ci_skip.txt.
+LIST_ONLY=0
+case "${1:-}" in
+    "") ;;
+    --list) LIST_ONLY=1 ;;
+    *) echo "ERROR: unknown argument: $1 (only --list is accepted)"; exit 1 ;;
+esac
+
+# BLARGG_CPU_INSTRS_ONLY=<label> runs just that ROM (CI runs the individual
+# ROMs in parallel, one invocation each). An unknown label is an error.
+ONLY="${BLARGG_CPU_INSTRS_ONLY:-}"
+
 MODE="${BLARGG_CPU_INSTRS_MODE:-all}"
 AGGREGATE_CYCLES="${BLARGG_CPU_INSTRS_AGGREGATE_CYCLES:-${BLARGG_CPU_INSTRS_CYCLES:-260000000}}"
 INDIVIDUAL_CYCLES="${BLARGG_CPU_INSTRS_INDIVIDUAL_CYCLES:-${BLARGG_CPU_INSTRS_CYCLES:-120000000}}"
 AGGREGATE_TIMEOUT_SECONDS="${BLARGG_CPU_INSTRS_AGGREGATE_TIMEOUT_SECONDS:-${BLARGG_CPU_INSTRS_TIMEOUT_SECONDS:-1500}}"
 INDIVIDUAL_TIMEOUT_SECONDS="${BLARGG_CPU_INSTRS_INDIVIDUAL_TIMEOUT_SECONDS:-${BLARGG_CPU_INSTRS_TIMEOUT_SECONDS:-700}}"
 MAX_RSS_KB="${BLARGG_CPU_INSTRS_MAX_RSS_KB:-65536}"
-
-if [[ -n "${EIGENSCRIPT:-}" ]]; then
-    EIGENSCRIPT_BIN="$EIGENSCRIPT"
-elif [[ -x "$ROOT_DIR/../EigenScript/src/eigenscript" ]]; then
-    EIGENSCRIPT_BIN="$ROOT_DIR/../EigenScript/src/eigenscript"
-elif command -v eigenscript >/dev/null 2>&1; then
-    EIGENSCRIPT_BIN="$(command -v eigenscript)"
-else
-    echo "ERROR: eigenscript binary not found."
-    echo "Set EIGENSCRIPT=/path/to/eigenscript."
-    exit 1
-fi
 
 if ! [[ "$AGGREGATE_CYCLES" =~ ^[0-9]+$ && "$AGGREGATE_CYCLES" -gt 0 ]]; then
     echo "ERROR: BLARGG_CPU_INSTRS_AGGREGATE_CYCLES must be a positive integer."
@@ -55,16 +57,6 @@ case "$MODE" in
         exit 1
         ;;
 esac
-
-if ! command -v timeout >/dev/null 2>&1; then
-    echo "ERROR: timeout command not found; refusing to run an uncapped CPU instruction suite."
-    exit 1
-fi
-
-if ! command -v /usr/bin/time >/dev/null 2>&1; then
-    echo "ERROR: /usr/bin/time not found; RSS guard requires GNU time."
-    exit 1
-fi
 
 LABELS=(
     cpu_instrs
@@ -126,13 +118,73 @@ TIMEOUTS=(
     "$INDIVIDUAL_TIMEOUT_SECONDS"
 )
 
+selected() {
+    local label="$1"
+    if [[ "$MODE" == "aggregate" && "$label" != "cpu_instrs" ]]; then
+        return 1
+    fi
+    if [[ "$MODE" == "individual" && "$label" == "cpu_instrs" ]]; then
+        return 1
+    fi
+    if [[ -n "$ONLY" && "$label" != "$ONLY" ]]; then
+        return 1
+    fi
+    return 0
+}
+
+if [[ -n "$ONLY" ]]; then
+    known=0
+    for label in "${LABELS[@]}"; do
+        if [[ "$label" == "$ONLY" ]]; then
+            known=1
+        fi
+    done
+    if [[ "$known" -ne 1 ]]; then
+        echo "ERROR: BLARGG_CPU_INSTRS_ONLY=$ONLY is not a known label (${LABELS[*]})."
+        exit 1
+    fi
+fi
+
+if [[ "$LIST_ONLY" -eq 1 ]]; then
+    for label in "${LABELS[@]}"; do
+        if selected "$label"; then
+            echo "$label"
+        fi
+    done
+    exit 0
+fi
+
+# The runtime is resolved only when ROMs will run, so --list works without it.
+if [[ -n "${EIGENSCRIPT:-}" ]]; then
+    EIGENSCRIPT_BIN="$EIGENSCRIPT"
+elif [[ -x "$ROOT_DIR/../EigenScript/src/eigenscript" ]]; then
+    EIGENSCRIPT_BIN="$ROOT_DIR/../EigenScript/src/eigenscript"
+elif command -v eigenscript >/dev/null 2>&1; then
+    EIGENSCRIPT_BIN="$(command -v eigenscript)"
+else
+    echo "ERROR: eigenscript binary not found."
+    echo "Set EIGENSCRIPT=/path/to/eigenscript."
+    exit 1
+fi
+
+if ! command -v timeout >/dev/null 2>&1; then
+    echo "ERROR: timeout command not found; refusing to run an uncapped CPU instruction suite."
+    exit 1
+fi
+
+if ! command -v /usr/bin/time >/dev/null 2>&1; then
+    echo "ERROR: /usr/bin/time not found; RSS guard requires GNU time."
+    exit 1
+fi
+
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 MAX_SEEN_RSS_KB=0
 TOTAL_REPORTED_CYCLES=0
+RAN=0
 
-echo "Blargg CPU instruction suite: mode=$MODE aggregate_cycles=$AGGREGATE_CYCLES aggregate_timeout=${AGGREGATE_TIMEOUT_SECONDS}s individual_cycles=$INDIVIDUAL_CYCLES individual_timeout=${INDIVIDUAL_TIMEOUT_SECONDS}s max_rss=${MAX_RSS_KB}KB"
+echo "Blargg CPU instruction suite: mode=$MODE only=${ONLY:-<all>} aggregate_cycles=$AGGREGATE_CYCLES aggregate_timeout=${AGGREGATE_TIMEOUT_SECONDS}s individual_cycles=$INDIVIDUAL_CYCLES individual_timeout=${INDIVIDUAL_TIMEOUT_SECONDS}s max_rss=${MAX_RSS_KB}KB"
 
 for i in "${!LABELS[@]}"; do
     LABEL="${LABELS[$i]}"
@@ -141,10 +193,7 @@ for i in "${!LABELS[@]}"; do
     TIMEOUT_SECONDS="${TIMEOUTS[$i]}"
     LOG_FILE="$TMP_DIR/${LABEL}.log"
 
-    if [[ "$MODE" == "aggregate" && "$LABEL" != "cpu_instrs" ]]; then
-        continue
-    fi
-    if [[ "$MODE" == "individual" && "$LABEL" == "cpu_instrs" ]]; then
+    if ! selected "$LABEL"; then
         continue
     fi
 
@@ -213,10 +262,18 @@ for i in "${!LABELS[@]}"; do
     fi
     TOTAL_REPORTED_CYCLES=$((TOTAL_REPORTED_CYCLES + REPORTED_CYCLES))
 
+    RAN=$((RAN + 1))
     printf 'ok: rom=%s budget=%s cycles=%s rss_kb=%s\n' "$LABEL" "$CYCLES" "$REPORTED_CYCLES" "$RSS_KB"
 done
 
+# A selection that ran nothing is a failure, not a pass.
+if [[ "$RAN" -eq 0 ]]; then
+    echo "FAIL: no ROM selected (mode=$MODE only=${ONLY:-<all>})."
+    exit 1
+fi
+
 echo "PASS: Blargg CPU instruction suite"
 echo "Mode:         ${MODE}"
+echo "ROMs run:     ${RAN}"
 echo "Total cycles: ${TOTAL_REPORTED_CYCLES}"
 echo "Peak RSS:     ${MAX_SEEN_RSS_KB} KB"

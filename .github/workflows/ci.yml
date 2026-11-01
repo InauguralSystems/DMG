@@ -20,8 +20,13 @@ jobs:
       # EIGS_REF — replaces the old clone-HEAD step that pinned nothing) and run
       # the unit tests + the fast input-script smoke (20K cycles on the
       # committed cpu_instrs.gb) inside it. eigenscript on PATH is the gfx
-      # build, which runs these headless tests fine. The full Blargg suites
-      # and gfx smoke stay out of CI here (slow), same as before.
+      # build, which runs these headless tests fine. tests/run_blargg_ci.sh
+      # runs the 11 individual cpu_instrs ROMs and the 4 timing ROMs in
+      # parallel through the runners' own verdicts; the only ROM it leaves
+      # out is named, with its reason, in tests/blargg_ci_skip.txt, and
+      # tests/test_ci_blargg_plants.sh --quick shows the gate can go red. The gfx
+      # smoke (and the Pokemon Red smoke, whose ROM is not committed) stay
+      # out of CI.
       - name: Build devcontainer and run unit tests
         uses: devcontainers/ci@v0.3
         with:
@@ -36,4 +41,6 @@ jobs:
             eigenscript tests/test_joypad.eigs
             tests/run_input_script_smoke.sh
             tests/run_debug_equivalence.sh
+            tests/test_ci_blargg_plants.sh --quick
+            tests/run_blargg_ci.sh
             tests/run_debug_ui_oracle.sh

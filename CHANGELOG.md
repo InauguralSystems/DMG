@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### CI — the Blargg ROMs are gated (hq#58)
+- `tests/run_blargg_ci.sh` runs the 11 individual `cpu_instrs` ROMs and the
+  4 timing ROMs in parallel on every push and PR, each through its runner's
+  own verdict. Before this, CI ran no Blargg ROM, so a DAA fault (01.gb) or a
+  wrong `LD (a16),SP` cycle count (instr_timing) merged green.
+- No silent skips. The gate's ROM set comes from the runners' new `--list`
+  output, and a ROM that is not run must be named with a reason in
+  `tests/blargg_ci_skip.txt` (only the aggregate ROM is). The run count is
+  pinned at 15. A runner selection that runs nothing now fails.
+- `run_debug_equivalence.sh`: the planted disasm fault counts as caught only
+  when the oracle reports mismatches. A crash in the plant path used to pass.
+- `tests/test_ci_blargg_plants.sh` holds the planted faults (`--quick` runs
+  in CI). The devcontainer installs GNU `time`, which the runners' RSS guard
+  needs.
+
 ### Debugger — tile + OAM viewers (#53, fourth artifact; completes the chrome)
 - East tile viewer: 384 VRAM tiles 2bpp-decoded into a 128x192
   palette-indexed fb (raw color indices, not BGP-mapped), blitted with
