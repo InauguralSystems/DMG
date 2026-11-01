@@ -22,6 +22,7 @@ RUN apt-get update \
         xdotool \
         python3 \
         python3-pil \
+        time \
  && rm -rf /var/lib/apt/lists/*
 
 # Full EigenScript source at the pinned tag; build the gfx variant (SDL2 is

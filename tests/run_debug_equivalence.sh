@@ -73,12 +73,25 @@ if [[ "${checked:-0}" -lt 100000 ]]; then
 fi
 echo "PASS: disasm lengths consistent over $checked live instructions"
 # The checker must catch a planted wrong-length fault or it proves nothing.
-if timeout "$TIMEOUT_SECONDS" "$EIGS" dmg.eigs roms/cpu_instrs.gb \
-    --cycles 20000000 --disasm-oracle 1000 --plant-disasm-fault >/dev/null 2>&1; then
+# "Caught" means the oracle ran and reported the plant: exit 1 with a
+# DISASM MISMATCH line and a nonzero mismatch count. Any other nonzero exit
+# (a crash, a runtime error, a timeout) is a broken check, not a catch.
+set +e
+out="$(timeout "$TIMEOUT_SECONDS" "$EIGS" dmg.eigs roms/cpu_instrs.gb \
+    --cycles 20000000 --disasm-oracle 1000 --plant-disasm-fault 2>&1)"
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
     echo "FAIL: planted disasm length fault NOT caught."
     exit 1
 fi
-echo "PASS: planted disasm length fault caught"
+if [[ "$rc" -ne 1 ]] || ! grep -q '^DISASM MISMATCH at ' <<< "$out" \
+    || ! grep -Eq '^Disasm oracle: checked=[0-9]+ skipped=[0-9]+ mismatches=[1-9][0-9]*$' <<< "$out"; then
+    echo "FAIL: planted disasm run failed without the oracle reporting the plant (rc=$rc)."
+    printf '%s\n' "$out" | tail -6
+    exit 1
+fi
+echo "PASS: planted disasm length fault caught ($(grep -o 'mismatches=[0-9]*' <<< "$out"))"
 
 echo "--- D: disasm golden master (regression pin, not proof) ---"
 timeout "$TIMEOUT_SECONDS" "$EIGS" dmg.eigs roms/cpu_instrs.gb \

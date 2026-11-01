@@ -48,14 +48,26 @@ EIGS=../EigenScript/src/eigenscript
 $EIGS tests/test_cpu.eigs
 $EIGS tests/test_memory.eigs
 
-# Blargg cpu_instrs suite (individual + aggregate, ~4 min wall at full)
+# Blargg cpu_instrs suite (individual + aggregate; serial, about 2.5 min
+# wall on a 2.1 GHz Xeon)
 tests/run_blargg_cpu_instrs_suite.sh
 # Tunables: BLARGG_CPU_INSTRS_MODE=all|aggregate|individual,
+#           BLARGG_CPU_INSTRS_ONLY=<label> (one ROM; --list prints labels),
 #           BLARGG_CPU_INSTRS_AGGREGATE_CYCLES,
 #           BLARGG_CPU_INSTRS_INDIVIDUAL_CYCLES, *_TIMEOUT_SECONDS
 
-# Blargg instr_timing + mem_timing (the accuracy-sensitive ones)
-tests/run_blargg_timing_suite.sh
+# Blargg instr_timing + mem_timing (+ mem_timing-2, interrupt_time)
+tests/run_blargg_timing_suite.sh          # BLARGG_TIMING_ONLY=<label>, --list
+
+# Blargg CI gate — runs every ROM the two runners list, in parallel,
+# through their own verdicts. The only ROM it leaves out (the aggregate)
+# is named with a reason in tests/blargg_ci_skip.txt; any other ROM that
+# drops out fails the count pin. Self-test with planted faults:
+tests/run_blargg_ci.sh                    # BLARGG_CI_JOBS (default nproc)
+tests/test_ci_blargg_plants.sh            # --quick runs in CI; full ~2 min
+# The gate needs bash 4+, GNU date and GNU /usr/bin/time (stock macOS bash
+# 3.2 is refused with an error). No automated job runs the aggregate ROM:
+# run it by hand when CPU semantics change.
 
 # Input-script cycle-order smoke (#25) — a CI gate
 tests/run_input_script_smoke.sh
@@ -186,7 +198,9 @@ that aren't obvious:)
 ## Current state
 
 All Blargg suites pass (cpu_instrs aggregate + individual,
-instr_timing, mem_timing). Cycle accuracy holds with the
+instr_timing, mem_timing). CI runs the 11 individual cpu_instrs ROMs
+and the 4 timing ROMs on every push and PR (`tests/run_blargg_ci.sh`);
+the aggregate ROM is run locally. Cycle accuracy holds with the
 intra-instruction stepping. JIT contribution is measured on the
 canary; the aggregate suite is too L1i-constrained for the JIT to
 dominate.

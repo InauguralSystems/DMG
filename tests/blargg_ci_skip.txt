@@ -1,0 +1,10 @@
+# Blargg ROMs that tests/run_blargg_ci.sh deliberately does NOT run in CI.
+#
+# Every label the two runners list (tests/run_blargg_cpu_instrs_suite.sh
+# --list, tests/run_blargg_timing_suite.sh --list) runs in CI unless it is
+# named here. Format: one entry per line, "<runner>:<label> <reason>", where
+# <runner> is cpu or timing. The CI driver fails on an entry with no reason,
+# a duplicate entry, or an entry naming a label no runner knows. Adding a line
+# here removes coverage, so it goes through review like any other change.
+
+cpu:cpu_instrs The aggregate ROM runs the same 11 tests that CI runs one ROM at a time, in parallel. Run serially, it takes about 66 s on one core, which would double the CI wall time. No automated job runs it: run it by hand with BLARGG_CPU_INSTRS_MODE=aggregate tests/run_blargg_cpu_instrs_suite.sh.
